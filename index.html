@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cisco Switch Map Viewer - Puerto Rico</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet.js for the map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- SheetJS (xlsx) for reading Excel files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        #map {
+            height: 70vh;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .leaflet-popup-content {
+            margin: 1rem;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+        }
+        .leaflet-popup-content b {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .legend {
+            line-height: 18px;
+            color: #555;
+        }
+        #switch-model-filter {
+            height: 120px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Cisco Switch Map Viewer</h1>
+            <p class="text-gray-600 mt-2">Puerto Rico Networking Equipment Visualization</p>
+        </header>
+
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex-1 w-full">
+                    <label for="file-upload" class="block text-sm font-medium text-gray-700 mb-2">Upload Excel File (.xlsx)</label>
+                    <div class="flex items-center gap-2">
+                        <input id="file-upload" type="file" accept=".xlsx" class="block w-full text-sm text-gray-500
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-md file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-indigo-50 file:text-indigo-700
+                            hover:file:bg-indigo-100 transition-colors duration-200
+                            cursor-pointer">
+                        <button id="load-data" class="px-4 py-2 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200 whitespace-nowrap">Load Data</button>
+                    </div>
+                </div>
+                <div class="text-center md:text-right mt-4 md:mt-0">
+                     <a href="#" id="download-sample" class="text-sm font-medium text-indigo-600 hover:text-indigo-500 whitespace-nowrap">
+                        Download Sample File
+                    </a>
+                </div>
+            </div>
+             <div id="loading" class="text-center mt-4 hidden">
+                <p class="text-gray-600">Loading data...</p>
+            </div>
+             <div id="error-message" class="text-center mt-4 text-red-600 hidden font-medium p-3 bg-red-50 rounded-md"></div>
+        </div>
+
+        <div id="filter-section" class="bg-white p-6 rounded-lg shadow-md mb-8 hidden">
+            <h3 class="text-xl font-semibold mb-4 text-gray-900 border-b pb-2">Data Filters</h3>
+            <div id="filter-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                <!-- Switch Model Filter -->
+                <div id="model-filter-wrapper">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Filter by Switch Model</label>
+                    <select id="switch-model-filter" multiple class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple models.</p>
+                </div>
+
+                <!-- Date Filter -->
+                <div id="date-filter-wrapper">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Filter by Installation Date</label>
+                    <div class="flex items-center gap-2">
+                        <div class="flex-1">
+                            <span class="text-[10px] uppercase text-gray-400 font-bold">From</span>
+                            <input type="date" id="date-from" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-[10px] uppercase text-gray-400 font-bold">To</span>
+                            <input type="date" id="date-to" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex gap-3 border-t pt-4">
+                <button id="apply-filters" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200">Apply All Filters</button>
+                <button id="clear-filters" class="px-6 py-2 bg-gray-200 text-gray-700 font-bold rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-colors duration-200">Clear All</button>
+            </div>
+        </div>
+
+        <div id="map"></div>
+         
+        <div id="status-message" class="mt-4 text-gray-600 text-sm rounded-lg transition-all duration-300 text-center">
+            Please upload an Excel file to see the switch locations.
+        </div>
+    </div>
+
+    <script>
+        let allSwitchData = []; 
+
+        const map = L.map('map').setView([18.2208, -66.5901], 9);
+        let markers = L.layerGroup().addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        const greenIcon = new L.Icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        });
+
+        const blackIcon = new L.Icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        });
+
+        const redIcon = new L.Icon({
+          iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+          iconSize: [25, 41],
+          iconAnchor: [12, 41],
+          popupAnchor: [1, -34],
+          shadowSize: [41, 41]
+        });
+
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function (map) {
+            const div = L.DomUtil.create('div', 'info legend bg-white p-2 rounded-md shadow-md');
+            const types = [
+                { label: 'Complete', colorUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png' },
+                { label: 'Branch', colorUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png' },
+                { label: 'Moex', colorUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png' }
+            ];
+            let legendHtml = '<h4 class="font-bold text-sm mb-1 text-center border-b pb-1">Type</h4>';
+            for (let i = 0; i < types.length; i++) {
+                legendHtml += `<div class="flex items-center mt-1"><img src="${types[i].colorUrl}" style="width: 12px; height: 20px; margin-right: 5px;"><span class="text-xs">${types[i].label}</span></div>`;
+            }
+            div.innerHTML = legendHtml;
+            return div;
+        };
+        legend.addTo(map);
+
+        const fileUpload = document.getElementById('file-upload');
+        const loadDataButton = document.getElementById('load-data');
+        const loadingIndicator = document.getElementById('loading');
+        const statusMessage = document.getElementById('status-message');
+        const errorMessage = document.getElementById('error-message');
+        const downloadSampleButton = document.getElementById('download-sample');
+        const filterSection = document.getElementById('filter-section');
+        const applyFiltersButton = document.getElementById('apply-filters');
+        const clearFiltersButton = document.getElementById('clear-filters');
+        
+        const dateFromInput = document.getElementById('date-from');
+        const dateToInput = document.getElementById('date-to');
+        const modelSelect = document.getElementById('switch-model-filter');
+
+        loadDataButton.addEventListener('click', handleFileUpload);
+        downloadSampleButton.addEventListener('click', downloadSampleExcel);
+        applyFiltersButton.addEventListener('click', plotDataOnMap);
+        clearFiltersButton.addEventListener('click', () => {
+            if (modelSelect) Array.from(modelSelect.options).forEach(opt => opt.selected = false);
+            const dates = allSwitchData.map(r => parseToDate(getRowValue(r, ['Date', 'Installation Date']))).filter(d => d !== null);
+            if (dates.length > 0) {
+                dateFromInput.value = formatDateForInput(new Date(Math.min(...dates)));
+                dateToInput.value = formatDateForInput(new Date(Math.max(...dates)));
+            }
+            plotDataOnMap();
+        });
+
+        function parseToDate(val) {
+            if (!val) return null;
+            if (val instanceof Date) return val;
+            if (typeof val === 'number' && val > 30000 && val < 60000) {
+                return new Date((val - 25569) * 86400 * 1000);
+            }
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function formatDateForInput(date) {
+            if (!date) return '';
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function formatValue(val) {
+            const date = parseToDate(val);
+            if (date) return date.toLocaleDateString();
+            return val || 'N/A';
+        }
+
+        function getRowValue(row, possibleNames) {
+            for (let name of possibleNames) {
+                if (row.hasOwnProperty(name)) return row[name];
+            }
+            const keys = Object.keys(row);
+            for (let name of possibleNames) {
+                const lowerName = name.toLowerCase();
+                const match = keys.find(k => k.toLowerCase().trim() === lowerName);
+                if (match) return row[match];
+            }
+            return undefined;
+        }
+
+        function handleFileUpload() {
+            const file = fileUpload.files[0];
+            if (!file) { showError("Please select a file first."); return; }
+
+            showLoading(true);
+            hideError();
+            markers.clearLayers();
+            allSwitchData = [];
+            resetStatusMessage();
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+                    
+                    if (json.length === 0) {
+                       showError("The Excel file is empty.");
+                       resetStatusMessage();
+                       return;
+                    }
+                    
+                    if (!validateData(json)) {
+                        showError("Missing essential columns. Please ensure it has 'Location', 'Latitude', and 'Longitude'.");
+                        resetStatusMessage();
+                        return;
+                    }
+                    
+                    allSwitchData = json;
+                    initializeFilters(allSwitchData);
+                    plotDataOnMap();
+                    filterSection.classList.remove('hidden');
+                } catch (error) {
+                    showError("Error processing file. Please ensure it's a valid .xlsx file.");
+                    resetStatusMessage();
+                } finally {
+                    showLoading(false);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        function validateData(data) {
+            if (data.length === 0) return false;
+            const coreColumns = ['Location', 'Latitude', 'Longitude'];
+            const firstRow = data[0];
+            const keys = Object.keys(firstRow).map(k => k.toLowerCase().trim());
+            return coreColumns.every(col => keys.includes(col.toLowerCase()));
+        }
+
+        function initializeFilters(data) {
+            modelSelect.innerHTML = ''; 
+            const switchModels = new Set(); 
+            const dates = [];
+
+            data.forEach(row => {
+                ['Switch 1', 'Switch 2', 'Switch 3'].forEach(h => {
+                    const m = getRowValue(row, [h]);
+                    if (m && String(m).toUpperCase() !== 'N/A') switchModels.add(String(m).trim());
+                });
+                const d = parseToDate(getRowValue(row, ['Date', 'Installation Date']));
+                if (d) dates.push(d);
+            });
+
+            Array.from(switchModels).sort().forEach(m => { 
+                const opt = document.createElement('option');
+                opt.value = m; opt.textContent = m;
+                modelSelect.appendChild(opt);
+            });
+
+            if (dates.length > 0) {
+                dateFromInput.value = formatDateForInput(new Date(Math.min(...dates)));
+                dateToInput.value = formatDateForInput(new Date(Math.max(...dates)));
+            }
+        }
+
+        function countSwitch(model, counts) {
+            if (!model || String(model).trim().toUpperCase() === 'N/A' || String(model).trim() === '') return 0;
+            const key = String(model).trim();
+            counts[key] = (counts[key] || 0) + 1;
+            return 1;
+        }
+
+        function plotDataOnMap() {
+            const selectedModels = Array.from(modelSelect.selectedOptions).map(o => o.value);
+            const fromDate = dateFromInput.value ? new Date(dateFromInput.value) : null;
+            const toDate = dateToInput.value ? new Date(dateToInput.value) : null;
+            if (toDate) toDate.setHours(23, 59, 59, 999);
+
+            markers.clearLayers();
+            let plotted = 0, switchesCount = 0, counts = {};
+            
+            allSwitchData.forEach(row => {
+                const lat = parseFloat(getRowValue(row, ['Latitude']));
+                const lon = parseFloat(getRowValue(row, ['Longitude']));
+
+                if (!isNaN(lat) && !isNaN(lon)) {
+                    const rowDate = parseToDate(getRowValue(row, ['Date', 'Installation Date']));
+                    const s1Val = getRowValue(row, ['Switch 1']);
+                    const s2Val = getRowValue(row, ['Switch 2']);
+                    const s3Val = getRowValue(row, ['Switch 3']);
+
+                    let modelMatch = selectedModels.length === 0 || [s1Val, s2Val, s3Val].some(s => selectedModels.includes(String(s || '').trim()));
+                    let dateMatch = !fromDate && !toDate || (rowDate && (!fromDate || rowDate >= fromDate) && (!toDate || rowDate <= toDate));
+
+                    if (modelMatch && dateMatch) {
+                        const complete = String(getRowValue(row, ['Complete']) || '').trim().toUpperCase();
+                        const type = String(getRowValue(row, ['Branch or Moex']) || '').trim().toUpperCase();
+                        const icon = complete === 'Y' ? redIcon : (type === 'BRANCH' ? greenIcon : blackIcon);
+                        
+                        const pueblo = getRowValue(row, ['Pueblo']) || 'N/A';
+                        const hora = getRowValue(row, ['Hora de Cieere']) || 'N/A';
+                        const cant = getRowValue(row, ['Cantidad de Switches']) || 'N/A';
+
+                        const popup = `
+                            <div class="min-w-[240px]">
+                                <h3 class="font-bold text-gray-900 border-b pb-1 mb-2">${getRowValue(row, ['Location']) || 'N/A'}</h3>
+                                <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] mb-3">
+                                    <span class="text-gray-400 font-bold uppercase">Pueblo:</span> <span>${pueblo}</span>
+                                    <span class="text-gray-400 font-bold uppercase">Type:</span> <span>${type}</span>
+                                    <span class="text-gray-400 font-bold uppercase">Date:</span> <span>${formatValue(rowDate)}</span>
+                                    <span class="text-gray-400 font-bold uppercase">Closing:</span> <span>${hora}</span>
+                                    <span class="text-gray-400 font-bold uppercase">Total Qty:</span> <span>${cant}</span>
+                                    <span class="text-gray-400 font-bold uppercase">Software:</span> <span>${getRowValue(row, ['Version']) || 'N/A'}</span>
+                                </div>
+                                <div class="bg-gray-50 p-2 rounded border space-y-2">
+                                    <b class="text-[9px] uppercase text-gray-400 block border-b pb-0.5 mb-1">Stack Hardware Details</b>
+                                    <div class="text-[11px] leading-tight">
+                                        <div class="mb-1"><b>Sw1:</b> ${s1Val || 'N/A'}</div>
+                                        <div class="pl-2 text-gray-500 mb-1">S/N: ${getRowValue(row, ['Serial No-1']) || 'N/A'} | Tag: ${getRowValue(row, ['TAG 1']) || 'N/A'}</div>
+                                        
+                                        <div class="mb-1"><b>Sw2:</b> ${s2Val || 'N/A'}</div>
+                                        <div class="pl-2 text-gray-500 mb-1">S/N: ${getRowValue(row, ['Serial No-2']) || 'N/A'} | Tag: ${getRowValue(row, ['Tag 2']) || 'N/A'}</div>
+                                        
+                                        <div class="mb-1"><b>Sw3:</b> ${s3Val || 'N/A'}</div>
+                                        <div class="pl-2 text-gray-500">S/N: ${getRowValue(row, ['Serial No -3']) || 'N/A'} | Tag: ${getRowValue(row, ['Tag 3']) || 'N/A'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        L.marker([lat, lon], { icon }).bindPopup(popup).addTo(markers);
+                        plotted++;
+                        switchesCount += countSwitch(s1Val, counts);
+                        switchesCount += countSwitch(s2Val, counts);
+                        switchesCount += countSwitch(s3Val, counts);
+                    }
+                }
+            });
+            
+            if (plotted > 0) {
+                let listHtml = '<ul class="text-xs text-gray-500 list-disc list-inside mt-2 grid grid-cols-2 gap-x-4">';
+                Object.keys(counts).sort().forEach(m => { listHtml += `<li><b>${m}:</b> ${counts[m]}</li>`; });
+                listHtml += '</ul>';
+                statusMessage.innerHTML = `<p class="font-medium text-gray-800">${plotted} locations match selection with ${switchesCount} actual switches detected.</p><p class="text-[10px] mt-3 uppercase font-bold text-gray-400 tracking-wider">Inventory Breakdown:</p>${listHtml}`;
+                statusMessage.classList.remove('text-center');
+                statusMessage.classList.add('text-left', 'bg-white', 'p-4', 'rounded-lg', 'shadow-sm', 'border');
+            } else {
+                statusMessage.innerHTML = allSwitchData.length > 0 ? 'No results found for current filters.' : 'Please upload a file to begin.';
+                statusMessage.classList.add('text-center');
+                statusMessage.classList.remove('text-left', 'bg-white', 'p-4', 'rounded-lg', 'shadow-sm', 'border');
+            }
+        }
+        
+        function downloadSampleExcel(e) {
+            e.preventDefault();
+            const data = [{ 
+                Date: '2026-01-29', Location: 'Main Branch Plaza', Pueblo: 'San Juan', 'Branch or Moex': 'Branch', Complete: 'N', 
+                Model: 'Cisco Catalyst 9300', Version: '17.3.4', Latitude: 18.4663, Longitude: -66.1057, 
+                'Switch 1': 'C9300-48P', 'Serial No-1': 'FOC123', 'TAG 1': 'T001', 'Switch 2': 'N/A', 'Serial No-2': 'N/A', 'Tag 2': 'N/A', 'Switch 3': 'N/A', 'Serial No -3': 'N/A', 'Tag 3': 'N/A',
+                'Cantidad de Switches': 1, 'Hora de Cieere': '5:00 PM'
+            }];
+            const sheet = XLSX.utils.json_to_sheet(data);
+            const book = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(book, sheet, 'Switches');
+            XLSX.writeFile(book, 'Cisco_Switches_PR_Sample.xlsx');
+        }
+
+        function showLoading(show) { loadingIndicator.classList.toggle('hidden', !show); }
+        function showError(msg) { errorMessage.textContent = msg; errorMessage.classList.remove('hidden'); }
+        function hideError() { errorMessage.classList.add('hidden'); }
+        function resetStatusMessage() {
+            statusMessage.innerHTML = 'Please upload an Excel file.';
+            statusMessage.classList.add('text-center');
+            statusMessage.classList.remove('text-left', 'bg-white', 'p-4', 'rounded-lg', 'shadow-sm', 'border');
+            filterSection.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
