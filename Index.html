@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cisco Switch Map Viewer - Puerto Rico</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet.js for the map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- SheetJS (xlsx) for reading Excel files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        #map {
+            height: 65vh;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem;
+        }
+        .leaflet-popup-content {
+            margin: 1rem;
+            font-size: 0.875rem;
+        }
+        .legend {
+            line-height: 18px;
+            color: #555;
+        }
+        select[multiple] {
+            height: 100px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">Cisco Switch Map Viewer</h1>
+            <p class="text-gray-600 mt-2">Puerto Rico Networking Equipment Visualization</p>
+        </header>
+
+        <!-- File Upload Section -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-6 border border-gray-200">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex-1 w-full">
+                    <label for="file-upload" class="block text-sm font-semibold text-gray-700 mb-2">Upload Inventory Excel (.xlsx)</label>
+                    <div class="flex items-center gap-2">
+                        <input id="file-upload" type="file" accept=".xlsx" class="block w-full text-sm text-gray-500
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-md file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-indigo-50 file:text-indigo-700
+                            hover:file:bg-indigo-100 transition-colors duration-200 cursor-pointer">
+                        <button id="load-data" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 transition-colors duration-200 shadow-sm">Load Data</button>
+                    </div>
+                </div>
+                <div class="text-center md:text-right">
+                     <a href="#" id="download-sample" class="text-sm font-semibold text-indigo-600 hover:underline">
+                        Download Template
+                    </a>
+                </div>
+            </div>
+             <div id="loading" class="text-center mt-4 hidden">
+                <p class="text-indigo-600 font-medium animate-pulse">Processing inventory data...</p>
+            </div>
+             <div id="error-message" class="text-center mt-4 text-red-600 hidden font-medium p-3 bg-red-50 rounded-md border border-red-100"></div>
+        </div>
+
+        <!-- Filter Section -->
+        <div id="filter-section" class="bg-white p-6 rounded-lg shadow-md mb-6 hidden border border-gray-200">
+            <h3 class="text-lg font-bold mb-4 text-gray-900 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd" />
+                </svg>
+                Advanced Filters
+            </h3>
+            <div id="filter-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Type Filter -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Location Type</label>
+                    <select id="type-filter" multiple class="block w-full rounded-md border-gray-200 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm border p-2">
+                    </select>
+                </div>
+
+                <!-- Model Filter -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Switch Models</label>
+                    <select id="switch-model-filter" multiple class="block w-full rounded-md border-gray-200 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm border p-2">
+                    </select>
+                </div>
+
+                <!-- Network Filter -->
+                <div id="network-filter-wrapper" class="hidden">
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Network Segment</label>
+                    <select id="network-filter" multiple class="block w-full rounded-md border-gray-200 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm border p-2">
+                    </select>
+                </div>
+
+                <!-- Date Filter -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Installation Range</label>
+                    <div class="space-y-2">
+                        <input type="date" id="date-from" class="block w-full rounded-md border-gray-200 text-sm border p-1.5">
+                        <input type="date" id="date-to" class="block w-full rounded-md border-gray-200 text-sm border p-1.5">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-6 flex flex-wrap gap-3 border-t pt-4">
+                <button id="apply-filters" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 transition-all shadow-sm">Apply Filters</button>
+                <button id="clear-filters" class="px-6 py-2 bg-gray-100 text-gray-600 font-bold rounded-md hover:bg-gray-200 transition-all">Reset All</button>
+            </div>
+        </div>
+
+        <div id="map"></div>
+         
+        <div id="status-message" class="mt-4 text-gray-500 text-sm rounded-lg transition-all duration-300 text-center py-4">
+            Upload an Excel file to visualize equipment locations.
+        </div>
+    </div>
+
+    <script>
+        let allSwitchData = []; 
+        const map = L.map('map').setView([18.2208, -66.5901], 9);
+        let markers = L.layerGroup().addTo(map);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        const greenIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+        const blackIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+        const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function () {
+            const div = L.DomUtil.create('div', 'info legend bg-white p-3 rounded-lg shadow-lg border border-gray-100');
+            div.innerHTML = `<h4 class="font-bold text-xs uppercase text-gray-400 mb-2 border-b pb-1">Status Key</h4>
+                <div class="flex items-center mb-1.5"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png" class="w-3 mr-2"> <span class="text-xs font-medium">Complete</span></div>
+                <div class="flex items-center mb-1.5"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png" class="w-3 mr-2"> <span class="text-xs font-medium">Branch</span></div>
+                <div class="flex items-center"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png" class="w-3 mr-2"> <span class="text-xs font-medium">Moex / Other</span></div>`;
+            return div;
+        };
+        legend.addTo(map);
+
+        // UI Elements
+        const fileUpload = document.getElementById('file-upload');
+        const loadDataButton = document.getElementById('load-data');
+        const loadingIndicator = document.getElementById('loading');
+        const statusMessage = document.getElementById('status-message');
+        const errorMessage = document.getElementById('error-message');
+        const filterSection = document.getElementById('filter-section');
+        const typeSelect = document.getElementById('type-filter');
+        const modelSelect = document.getElementById('switch-model-filter');
+        const networkSelect = document.getElementById('network-filter');
+        const networkWrapper = document.getElementById('network-filter-wrapper');
+        const dateFromInput = document.getElementById('date-from');
+        const dateToInput = document.getElementById('date-to');
+
+        loadDataButton.addEventListener('click', handleFileUpload);
+        document.getElementById('download-sample').addEventListener('click', downloadSampleExcel);
+        document.getElementById('apply-filters').addEventListener('click', plotDataOnMap);
+        document.getElementById('clear-filters').addEventListener('click', resetAllFilters);
+
+        function getRowValue(row, possibleNames) {
+            for (let name of possibleNames) {
+                if (row.hasOwnProperty(name)) return row[name];
+                const keys = Object.keys(row);
+                const match = keys.find(k => k.toLowerCase().trim() === name.toLowerCase().trim());
+                if (match) return row[match];
+            }
+            return undefined;
+        }
+
+        function parseToDate(val) {
+            if (!val) return null;
+            if (val instanceof Date) return val;
+            if (typeof val === 'number' && val > 30000 && val < 60000) return new Date((val - 25569) * 86400 * 1000);
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function handleFileUpload() {
+            const file = fileUpload.files[0];
+            if (!file) { showError("Please select an Excel file."); return; }
+            showLoading(true);
+            hideError();
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+                    const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    if (json.length === 0) throw new Error("File is empty.");
+                    if (!getRowValue(json[0], ['Latitude']) || !getRowValue(json[0], ['Longitude'])) throw new Error("Missing coordinates.");
+                    
+                    allSwitchData = json;
+                    initializeFilters(allSwitchData);
+                    plotDataOnMap();
+                    filterSection.classList.remove('hidden');
+                } catch (err) {
+                    showError(err.message || "Error reading Excel file.");
+                } finally {
+                    showLoading(false);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function initializeFilters(data) {
+            const models = new Set(), types = new Set(), networks = new Set(), dates = [];
+            
+            data.forEach(row => {
+                ['Switch 1', 'Switch 2', 'Switch 3'].forEach(h => {
+                    const m = getRowValue(row, [h]);
+                    if (m && String(m).toUpperCase() !== 'N/A') models.add(String(m).trim());
+                });
+                const t = getRowValue(row, ['Branch or Moex', 'Type']);
+                if (t) types.add(String(t).trim());
+                
+                const n = getRowValue(row, ['Network', 'Segment']);
+                if (n) networks.add(String(n).trim());
+
+                const d = parseToDate(getRowValue(row, ['Date', 'Installation Date']));
+                if (d) dates.push(d);
+            });
+
+            populateSelect(modelSelect, models);
+            populateSelect(typeSelect, types);
+            
+            if (networks.size > 0) {
+                populateSelect(networkSelect, networks);
+                networkWrapper.classList.remove('hidden');
+            } else {
+                networkWrapper.classList.add('hidden');
+            }
+
+            if (dates.length > 0) {
+                const min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
+                dateFromInput.value = min.toISOString().split('T')[0];
+                dateToInput.value = max.toISOString().split('T')[0];
+            }
+        }
+
+        function populateSelect(el, set) {
+            el.innerHTML = '';
+            Array.from(set).sort().forEach(val => {
+                const opt = document.createElement('option');
+                opt.value = opt.textContent = val;
+                el.appendChild(opt);
+            });
+        }
+
+        function plotDataOnMap() {
+            const selectedModels = Array.from(modelSelect.selectedOptions).map(o => o.value);
+            const selectedTypes = Array.from(typeSelect.selectedOptions).map(o => o.value);
+            const selectedNetworks = Array.from(networkSelect.selectedOptions).map(o => o.value);
+            const from = dateFromInput.value ? new Date(dateFromInput.value) : null;
+            const to = dateToInput.value ? new Date(dateToInput.value) : null;
+            if (to) to.setHours(23,59,59);
+
+            markers.clearLayers();
+            let count = 0, swCount = 0, modelSums = {};
+
+            allSwitchData.forEach(row => {
+                const lat = parseFloat(getRowValue(row, ['Latitude'])), lon = parseFloat(getRowValue(row, ['Longitude']));
+                if (isNaN(lat) || isNaN(lon)) return;
+
+                const rowDate = parseToDate(getRowValue(row, ['Date', 'Installation Date']));
+                const s1 = getRowValue(row, ['Switch 1']), s2 = getRowValue(row, ['Switch 2']), s3 = getRowValue(row, ['Switch 3']);
+                const type = String(getRowValue(row, ['Branch or Moex', 'Type']) || '').trim();
+                const network = String(getRowValue(row, ['Network', 'Segment']) || '').trim();
+
+                const modelMatch = selectedModels.length === 0 || [s1, s2, s3].some(s => selectedModels.includes(String(s || '').trim()));
+                const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(type);
+                const netMatch = selectedNetworks.length === 0 || selectedNetworks.includes(network);
+                const dateMatch = !rowDate || ((!from || rowDate >= from) && (!to || rowDate <= to));
+
+                if (modelMatch && typeMatch && netMatch && dateMatch) {
+                    const complete = String(getRowValue(row, ['Complete']) || '').trim().toUpperCase() === 'Y';
+                    const icon = complete ? redIcon : (type.toUpperCase() === 'BRANCH' ? greenIcon : blackIcon);
+                    
+                    const popup = `<div class="min-w-[220px]">
+                        <h3 class="font-bold text-gray-900 border-b pb-1 mb-2">${getRowValue(row, ['Location']) || 'Unknown'}</h3>
+                        <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] mb-3">
+                            <span class="text-gray-400 font-bold uppercase text-[9px]">Pueblo</span> <span>${getRowValue(row, ['Pueblo']) || '-'}</span>
+                            <span class="text-gray-400 font-bold uppercase text-[9px]">Network</span> <span>${network || '-'}</span>
+                            <span class="text-gray-400 font-bold uppercase text-[9px]">Type</span> <span>${type || '-'}</span>
+                            <span class="text-gray-400 font-bold uppercase text-[9px]">Install Date</span> <span>${rowDate ? rowDate.toLocaleDateString() : '-'}</span>
+                        </div>
+                        <div class="bg-gray-50 p-2 rounded border border-gray-100 text-[10px] space-y-1.5">
+                            <div><b>Sw1:</b> ${s1 || 'N/A'} <div class="text-gray-400 ml-2">SN: ${getRowValue(row, ['Serial No-1']) || '-'} | Tag: ${getRowValue(row, ['TAG 1']) || '-'}</div></div>
+                            ${s2 && s2 !== 'N/A' ? `<div><b>Sw2:</b> ${s2} <div class="text-gray-400 ml-2">SN: ${getRowValue(row, ['Serial No-2']) || '-'} | Tag: ${getRowValue(row, ['Tag 2']) || '-'}</div></div>` : ''}
+                            ${s3 && s3 !== 'N/A' ? `<div><b>Sw3:</b> ${s3} <div class="text-gray-400 ml-2">SN: ${getRowValue(row, ['Serial No -3']) || '-'} | Tag: ${getRowValue(row, ['Tag 3']) || '-'}</div></div>` : ''}
+                        </div>
+                    </div>`;
+
+                    L.marker([lat, lon], { icon }).bindPopup(popup).addTo(markers);
+                    count++;
+                    [s1, s2, s3].forEach(s => {
+                        if (s && String(s).toUpperCase() !== 'N/A') {
+                            swCount++;
+                            const key = String(s).trim();
+                            modelSums[key] = (modelSums[key] || 0) + 1;
+                        }
+                    });
+                }
+            });
+
+            updateStatus(count, swCount, modelSums);
+        }
+
+        function updateStatus(plotted, totalSw, modelSums) {
+            if (plotted > 0) {
+                let list = '<div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-3">';
+                Object.keys(modelSums).sort().forEach(m => { list += `<div class="text-[11px]"><b class="text-gray-600">${m}:</b> ${modelSums[m]}</div>`; });
+                list += '</div>';
+                statusMessage.innerHTML = `<div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 text-left">
+                    <p class="font-bold text-indigo-900">${plotted} Locations found <span class="text-gray-400 font-normal">(${totalSw} total switches)</span></p>
+                    <p class="text-[10px] uppercase font-black text-gray-300 mt-4 tracking-widest border-b pb-1">Inventory Breakdown</p>${list}</div>`;
+                statusMessage.classList.remove('text-center');
+            } else {
+                statusMessage.innerHTML = "No results found for current filters.";
+                statusMessage.classList.add('text-center');
+            }
+        }
+
+        function resetAllFilters() {
+            [modelSelect, typeSelect, networkSelect].forEach(s => Array.from(s.options).forEach(o => o.selected = false));
+            const dates = allSwitchData.map(r => parseToDate(getRowValue(r, ['Date', 'Installation Date']))).filter(d => d);
+            if (dates.length) {
+                dateFromInput.value = new Date(Math.min(...dates)).toISOString().split('T')[0];
+                dateToInput.value = new Date(Math.max(...dates)).toISOString().split('T')[0];
+            }
+            plotDataOnMap();
+        }
+
+        function downloadSampleExcel(e) {
+            e.preventDefault();
+            const data = [{ Date: '2026-01-20', Location: 'Main Branch', Pueblo: 'San Juan', 'Branch or Moex': 'Branch', Network: 'Prod-VLAN10', Latitude: 18.466, Longitude: -66.105, 'Switch 1': 'C9300-48P', 'Serial No-1': 'FOC123', 'TAG 1': 'T001', Complete: 'N' }];
+            const sheet = XLSX.utils.json_to_sheet(data);
+            const book = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(book, sheet, 'Switches');
+            XLSX.writeFile(book, 'Inventory_Template.xlsx');
+        }
+
+        function showLoading(s) { loadingIndicator.classList.toggle('hidden', !s); }
+        function showError(m) { errorMessage.textContent = m; errorMessage.classList.remove('hidden'); }
+        function hideError() { errorMessage.classList.add('hidden'); }
+        function resetStatusMessage() { statusMessage.innerHTML = "Upload an Excel file to begin."; statusMessage.classList.add('text-center'); }
+    </script>
+</body>
+</html>
