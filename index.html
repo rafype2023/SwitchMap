@@ -38,9 +38,37 @@
         select[multiple] {
             height: 120px;
         }
+        /* Floating Image Viewer Styles */
+        #image-viewer {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        #image-viewer img {
+            max-width: 90%;
+            max-height: 90%;
+            border-radius: 8px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            border: 4px solid white;
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
+
+    <!-- Floating Image Viewer Overlay -->
+    <div id="image-viewer" onclick="this.style.display='none'">
+        <div class="absolute top-5 right-5 text-white text-4xl font-bold cursor-pointer hover:text-gray-300">&times;</div>
+        <img id="viewer-img" src="" alt="Deployment Photo">
+        <div id="viewer-caption" class="absolute bottom-10 text-white text-xl font-semibold bg-black/50 px-4 py-2 rounded"></div>
+    </div>
 
     <div class="container mx-auto p-4 md:p-8 max-w-7xl">
         <header class="text-center mb-8">
@@ -199,19 +227,49 @@
         }
 
         /**
-         * Helper to render New Deployment Tags as links to SharePoint photos
+         * SharePoint Tag Photo Link
          */
         function renderNewTagLink(tagValue) {
             const rawTag = String(tagValue || '').trim();
             if (!rawTag || rawTag === '-' || rawTag.toLowerCase() === 'n/a') return '-';
-            
-            // Clean value for URL (some might have spaces)
             const cleanedTag = encodeURIComponent(rawTag);
             const baseUrl = "https://intwoglobal-my.sharepoint.com/:i:/r/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
             const suffix = ".jpeg?csf=1&web=1&e=eg9pzT";
             const fullUrl = `${baseUrl}${cleanedTag}${suffix}`;
+            return `<a href="${fullUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline font-bold">${rawTag}</a>`;
+        }
+
+        /**
+         * Floating Image Viewer Logic
+         */
+        function viewImage(url, title) {
+            const viewer = document.getElementById('image-viewer');
+            const img = document.getElementById('viewer-img');
+            const caption = document.getElementById('viewer-caption');
+            img.src = url;
+            caption.textContent = title;
+            viewer.style.display = 'flex';
+        }
+
+        /**
+         * Helper to construct Before/After deployment image links
+         */
+        function renderDeploymentImageLinks(ip) {
+            const rawIp = String(ip || '').trim();
+            if (!rawIp || rawIp === '-' || rawIp.toLowerCase() === 'n/a') return '-';
             
-            return `<a href="${fullUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline decoration-indigo-300 font-bold" title="View Deployment Photo">${rawTag}</a>`;
+            // Convert 10.0.5.2 to 10-0-5-2
+            const dashIp = rawIp.replace(/\./g, '-');
+            const baseUrl = "https://switchmap.onrender.com/";
+            const beforeUrl = `${baseUrl}a${dashIp}.jpeg`;
+            const afterUrl = `${baseUrl}d${dashIp}.jpeg`;
+
+            return `
+                <div class="flex gap-2 mt-1">
+                    <button onclick="viewImage('${beforeUrl}', 'Before Deployment - ${rawIp}')" class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-200 hover:bg-amber-200 font-bold transition-colors">Before</button>
+                    <button onclick="viewImage('${afterUrl}', 'After Deployment - ${rawIp}')" class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 hover:bg-emerald-200 font-bold transition-colors">After</button>
+                </div>
+            `;
         }
 
         function parseToDate(val) {
@@ -250,7 +308,6 @@
 
         function initializeFilters(data) {
             const models = new Set(), types = new Set(), networks = new Set(), dates = [];
-            
             data.forEach(row => {
                 ['Switch 1', 'Switch 2', 'Switch 3'].forEach(h => {
                     const m = getRowValue(row, [h]);
@@ -258,24 +315,19 @@
                 });
                 const t = getRowValue(row, ['Branch or Moex', 'Type']);
                 if (t) types.add(String(t).trim());
-                
                 const n = getRowValue(row, ['NETWORK', 'Network', 'Segment']);
                 if (n && String(n).toUpperCase() !== 'N/A') networks.add(String(n).trim());
-
                 const d = parseToDate(getRowValue(row, ['Date', 'Installation Date']));
                 if (d) dates.push(d);
             });
-
             populateSelect(modelSelect, models);
             populateSelect(typeSelect, types);
-            
             if (networks.size > 0) {
                 populateSelect(networkSelect, networks);
                 networkWrapper.classList.remove('hidden');
             } else {
                 networkWrapper.classList.add('hidden');
             }
-
             if (dates.length > 0) {
                 const min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
                 dateFromInput.value = min.toISOString().split('T')[0];
@@ -334,8 +386,20 @@
                             <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Network IP</span> <span class="font-medium font-mono">${network || '-'}</span></div>
                             <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Type</span> <span class="font-medium">${type || '-'}</span></div>
                             <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Stacked?</span> <span class="font-medium">${stack === 'Y' ? 'Yes' : 'No'}</span></div>
-                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Software</span> <span class="font-medium">${getRowValue(row, ['Version']) || '-'}</span></div>
-                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Deployment</span> <span class="font-medium">${rowDate ? rowDate.toLocaleDateString() : '-'}</span></div>
+                            <div>
+                                <span class="text-gray-400 font-bold uppercase text-[9px] block">Software</span> 
+                                <span class="font-medium">${getRowValue(row, ['Version']) || '-'}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400 font-bold uppercase text-[9px] block">Deployment</span> 
+                                <span class="font-medium">${rowDate ? rowDate.toLocaleDateString() : '-'}</span>
+                            </div>
+                        </div>
+
+                        <!-- Deploy Photos Section -->
+                        <div class="mb-4">
+                            <span class="text-gray-400 font-bold uppercase text-[9px] block mb-1">Deployment Photos</span>
+                            ${renderDeploymentImageLinks(network)}
                         </div>
                         
                         <!-- Inventory Reference Section -->
@@ -360,7 +424,7 @@
                             </div>` : ''}
                         </div>
 
-                        <!-- Deployment Section (WITH LINKS) -->
+                        <!-- Deployment Section -->
                         <div class="bg-indigo-50/40 p-2.5 rounded border border-indigo-100 text-[10px] space-y-2">
                             <div class="flex items-center gap-1.5 text-[9px] uppercase text-indigo-400 tracking-wider font-bold mb-1">
                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
