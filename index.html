@@ -7,180 +7,289 @@
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Leaflet.js for the map -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- SheetJS (xlsx) for reading Excel files -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Google Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
+        body { font-family: 'Inter', sans-serif; }
         #map {
             height: 65vh;
+            width: 100%;
             border-radius: 0.5rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            background: #f3f4f6;
         }
-        .leaflet-popup-content-wrapper {
-            border-radius: 0.5rem;
-        }
-        .leaflet-popup-content {
-            margin: 1rem;
-            font-size: 0.875rem;
-        }
-        .legend {
-            line-height: 18px;
-            color: #555;
-        }
-        select[multiple] {
-            height: 120px;
-        }
-        /* Floating Image Viewer Styles */
-        #image-viewer {
+        .leaflet-popup-content-wrapper { border-radius: 0.5rem; }
+        .legend { line-height: 18px; color: #555; }
+        select[multiple] { height: 100px; }
+
+        /* Floating Content Viewer Styles */
+        #content-viewer {
             display: none;
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.85);
-            z-index: 9999;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 10000;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
-            cursor: pointer;
         }
-        #image-viewer img {
-            max-width: 90%;
-            max-height: 90%;
+        #viewer-header {
+            width: 90%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            color: white;
+        }
+        #viewer-container {
+            width: 90%;
+            height: 80%;
+            background: #fff;
             border-radius: 8px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-            border: 4px solid white;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        #viewer-frame { width: 100%; height: 100%; border: none; }
+        .viewer-btn {
+            background: #4f46e5;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-decoration: none;
+        }
+        .close-x {
+            color: white;
+            font-size: 40px;
+            line-height: 1;
+            cursor: pointer;
+            background: transparent;
+            border: none;
         }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
 
-    <!-- Floating Image Viewer Overlay -->
-    <div id="image-viewer" onclick="this.style.display='none'">
-        <div class="absolute top-5 right-5 text-white text-4xl font-bold cursor-pointer hover:text-gray-300">&times;</div>
-        <img id="viewer-img" src="" alt="Deployment Photo">
-        <div id="viewer-caption" class="absolute bottom-10 text-white text-xl font-semibold bg-black/50 px-4 py-2 rounded"></div>
+    <!-- Content Viewer Overlay -->
+    <div id="content-viewer">
+        <div id="viewer-header">
+            <div id="viewer-title" class="font-bold text-lg"></div>
+            <div class="flex gap-4 items-center">
+                <a id="viewer-external" href="#" target="_blank" class="viewer-btn text-sm">Open in SharePoint</a>
+                <button onclick="closeViewer()" class="close-x">&times;</button>
+            </div>
+        </div>
+        <div id="viewer-container">
+            <iframe id="viewer-frame" src="about:blank"></iframe>
+        </div>
+        <div class="text-gray-400 text-xs mt-4 text-center">
+            Note: If the preview is blank, SharePoint security is preventing embedding. Use the blue button above to open the file.
+        </div>
     </div>
 
     <div class="container mx-auto p-4 md:p-8 max-w-7xl">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-gray-900 tracking-tight">Cisco Switch Map Viewer</h1>
-            <p class="text-gray-600 mt-2">Puerto Rico Networking Equipment Visualization</p>
+            <p class="text-gray-600 mt-2 font-medium">Puerto Rico Master Inventory & Deployment Visualization</p>
         </header>
 
-        <!-- File Upload Section -->
+        <!-- Upload Section -->
         <div class="bg-white p-6 rounded-lg shadow-md mb-6 border border-gray-200">
             <div class="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div class="flex-1 w-full">
                     <label for="file-upload" class="block text-sm font-semibold text-gray-700 mb-2">Upload Master Inventory (.xlsx)</label>
                     <div class="flex items-center gap-2">
                         <input id="file-upload" type="file" accept=".xlsx" class="block w-full text-sm text-gray-500
-                            file:mr-4 file:py-2 file:px-4
-                            file:rounded-md file:border-0
-                            file:text-sm file:font-semibold
-                            file:bg-indigo-50 file:text-indigo-700
-                            hover:file:bg-indigo-100 transition-colors duration-200 cursor-pointer">
-                        <button id="load-data" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 transition-colors duration-200 shadow-sm">Load Data</button>
+                            file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0
+                            file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700
+                            hover:file:bg-indigo-100 transition-colors cursor-pointer">
+                        <button id="load-data" class="px-5 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 shadow-sm transition-all">Load Data</button>
                     </div>
                 </div>
                 <div class="text-center md:text-right">
-                     <a href="#" id="download-sample" class="text-sm font-semibold text-indigo-600 hover:underline">
-                        Download Template
-                    </a>
+                     <a href="#" id="download-sample" class="text-sm font-semibold text-indigo-600 hover:underline">Download Template</a>
                 </div>
             </div>
              <div id="loading" class="text-center mt-4 hidden">
-                <p class="text-indigo-600 font-medium animate-pulse">Processing inventory data...</p>
+                <p class="text-indigo-600 font-bold animate-pulse">Loading Inventory...</p>
             </div>
              <div id="error-message" class="text-center mt-4 text-red-600 hidden font-medium p-3 bg-red-50 rounded-md border border-red-100"></div>
         </div>
 
-        <!-- Filter Section -->
+        <!-- Filters Section -->
         <div id="filter-section" class="bg-white p-6 rounded-lg shadow-md mb-6 hidden border border-gray-200">
-            <h3 class="text-lg font-bold mb-4 text-gray-900 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clip-rule="evenodd" />
-                </svg>
-                Inventory Filters
-            </h3>
+            <h3 class="text-lg font-bold mb-4 text-gray-900">Inventory Filters</h3>
             <div id="filter-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <!-- Type Filter -->
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Location Type</label>
-                    <select id="type-filter" multiple class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm border p-2">
-                    </select>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Location Type</label>
+                    <select id="type-filter" multiple class="block w-full rounded border-gray-300 text-sm p-2"></select>
                 </div>
-
-                <!-- Model Filter -->
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Inventory Model</label>
-                    <select id="switch-model-filter" multiple class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm border p-2">
-                    </select>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Inventory Model</label>
+                    <select id="switch-model-filter" multiple class="block w-full rounded border-gray-300 text-sm p-2"></select>
                 </div>
-
-                <!-- Network Filter -->
                 <div id="network-filter-wrapper">
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Network Segment</label>
-                    <select id="network-filter" multiple class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm border p-2">
-                    </select>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Network Segment</label>
+                    <select id="network-filter" multiple class="block w-full rounded border-gray-300 text-sm p-2"></select>
                 </div>
-
-                <!-- Date Filter -->
                 <div>
-                    <label class="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Deployment Schedule</label>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Deployment Schedule</label>
                     <div class="space-y-2">
-                        <input type="date" id="date-from" class="block w-full rounded-md border-gray-200 text-sm border p-1.5">
-                        <input type="date" id="date-to" class="block w-full rounded-md border-gray-200 text-sm border p-1.5">
+                        <input type="date" id="date-from" class="block w-full rounded border-gray-300 text-sm p-1">
+                        <input type="date" id="date-to" class="block w-full rounded border-gray-300 text-sm p-1">
                     </div>
                 </div>
             </div>
-            
-            <div class="mt-6 flex flex-wrap gap-3 border-t pt-4">
-                <button id="apply-filters" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 transition-all shadow-sm">Apply Filters</button>
-                <button id="clear-filters" class="px-6 py-2 bg-gray-100 text-gray-600 font-bold rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-all">Reset All</button>
+            <div class="mt-6 flex gap-3 border-t pt-4">
+                <button id="apply-filters" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 shadow-sm transition-all">Apply Filters</button>
+                <button id="clear-filters" class="px-6 py-2 bg-gray-100 text-gray-600 font-bold rounded-md hover:bg-gray-200 transition-all">Reset All</button>
             </div>
         </div>
 
+        <!-- Map Container -->
         <div id="map"></div>
          
-        <div id="status-message" class="mt-4 text-gray-500 text-sm rounded-lg transition-all duration-300 text-center py-4">
-            Upload an Excel file to begin visualization.
+        <div id="status-message" class="mt-4 text-gray-500 text-sm text-center py-4">
+            Upload a Master Inventory file to begin.
         </div>
     </div>
 
     <script>
-        let allSwitchData = []; 
-        const map = L.map('map').setView([18.2208, -66.5901], 9);
-        let markers = L.layerGroup().addTo(map);
+        // --- Global Variables & Icons ---
+        let allSwitchData = [];
+        let map, markers;
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        const greenIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
 
-        const greenIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
-        const blackIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
-        const redIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+        const blackIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
 
-        const legend = L.control({position: 'bottomright'});
-        legend.onAdd = function () {
-            const div = L.DomUtil.create('div', 'info legend bg-white p-3 rounded-lg shadow-lg border border-gray-100');
-            div.innerHTML = `<h4 class="font-bold text-xs uppercase text-gray-400 mb-2 border-b pb-1 text-center">Status Key</h4>
-                <div class="flex items-center mb-1.5"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png" class="w-3 mr-2"> <span class="text-xs font-medium text-red-700">Complete</span></div>
-                <div class="flex items-center mb-1.5"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png" class="w-3 mr-2"> <span class="text-xs font-medium text-green-700">Branch</span></div>
-                <div class="flex items-center"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png" class="w-3 mr-2"> <span class="text-xs font-medium text-gray-700">Moex / Other</span></div>`;
-            return div;
+        const redIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        // SharePoint Config
+        const sharePointBase = "https://intwoglobal-my.sharepoint.com/:i:/r/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
+        const sharePointSuffix = ".jpeg?csf=1&web=1&e=eg9pzT";
+
+        // --- App Initialization ---
+        window.onload = function() {
+            initMap();
         };
-        legend.addTo(map);
 
+        function initMap() {
+            try {
+                map = L.map('map').setView([18.2208, -66.5901], 9);
+                markers = L.layerGroup().addTo(map);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+
+                const legend = L.control({position: 'bottomright'});
+                legend.onAdd = function() {
+                    const div = L.DomUtil.create('div', 'legend bg-white p-3 rounded shadow-lg border border-gray-100');
+                    div.innerHTML = `<h4 class="font-bold text-xs uppercase text-gray-400 mb-2 border-b pb-1">Legend</h4>
+                        <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png" class="w-3 mr-2"> <span class="text-xs">Complete</span></div>
+                        <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png" class="w-3 mr-2"> <span class="text-xs">Branch</span></div>
+                        <div class="flex items-center"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png" class="w-3 mr-2"> <span class="text-xs">Moex / Other</span></div>`;
+                    return div;
+                };
+                legend.addTo(map);
+            } catch (e) {
+                console.error("Map initialization failed:", e);
+            }
+        }
+
+        // --- Content Viewer Logic ---
+        window.openViewer = function(url, title) {
+            const viewer = document.getElementById('content-viewer');
+            const frame = document.getElementById('viewer-frame');
+            const titleEl = document.getElementById('viewer-title');
+            const extLink = document.getElementById('viewer-external');
+            
+            titleEl.textContent = title;
+            extLink.href = url;
+            frame.src = url;
+            viewer.style.display = 'flex';
+        };
+
+        window.closeViewer = function() {
+            const viewer = document.getElementById('content-viewer');
+            document.getElementById('viewer-frame').src = 'about:blank';
+            viewer.style.display = 'none';
+        };
+
+        // --- Data Handling ---
+        function getRowValue(row, possibleNames) {
+            for (let name of possibleNames) {
+                if (row.hasOwnProperty(name)) return row[name];
+                const match = Object.keys(row).find(k => k.toLowerCase().trim() === name.toLowerCase().trim());
+                if (match) return row[match];
+            }
+            return undefined;
+        }
+
+        function getTagValue(row, switchNum, isNew = false) {
+            if (isNew) {
+                if (switchNum === 1) return row['Tag 1_1'] || row['Tag 1'] || '-';
+                if (switchNum === 2) return row['Tag 2_1'] || '-';
+                if (switchNum === 3) return row['Tag 3_1'] || '-';
+            } else {
+                if (switchNum === 1) return row['TAG 1'] || '-';
+                if (switchNum === 2) return row['Tag 2'] || '-';
+                if (switchNum === 3) return row['Tag 3'] || '-';
+            }
+            return '-';
+        }
+
+        function renderNewTagLink(tagValue) {
+            const tag = String(tagValue || '').trim();
+            if (!tag || tag === '-' || tag.toLowerCase() === 'n/a') return '-';
+            const fullUrl = `${sharePointBase}${encodeURIComponent(tag)}${sharePointSuffix}`;
+            return `<a href="${fullUrl}" onclick="event.preventDefault(); window.openViewer('${fullUrl}', 'Tag Photo - ${tag}')" class="text-indigo-600 hover:text-indigo-800 underline font-bold">#${tag}</a>`;
+        }
+
+        function renderDeploymentImageLinks(ip) {
+            const rawIp = String(ip || '').trim();
+            if (!rawIp || rawIp === '-' || rawIp.toLowerCase() === 'n/a') return '-';
+            const dashIp = rawIp.replace(/\./g, '-');
+            const beforeUrl = `${sharePointBase}a${dashIp}${sharePointSuffix}`;
+            const afterUrl = `${sharePointBase}d${dashIp}${sharePointSuffix}`;
+            return `
+                <div class="flex gap-2 mt-1">
+                    <a href="${beforeUrl}" onclick="event.preventDefault(); window.openViewer('${beforeUrl}', 'Before Photo - ${rawIp}')" class="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200 font-bold no-underline inline-block">Before</a>
+                    <a href="${afterUrl}" onclick="event.preventDefault(); window.openViewer('${afterUrl}', 'After Photo - ${rawIp}')" class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-200 font-bold no-underline inline-block">After</a>
+                </div>`;
+        }
+
+        // --- Event Listeners ---
         const fileUpload = document.getElementById('file-upload');
         const loadDataButton = document.getElementById('load-data');
         const loadingIndicator = document.getElementById('loading');
@@ -190,99 +299,12 @@
         const typeSelect = document.getElementById('type-filter');
         const modelSelect = document.getElementById('switch-model-filter');
         const networkSelect = document.getElementById('network-filter');
-        const networkWrapper = document.getElementById('network-filter-wrapper');
         const dateFromInput = document.getElementById('date-from');
         const dateToInput = document.getElementById('date-to');
 
-        // Centralized SharePoint Configuration
-        const sharePointBase = "https://intwoglobal-my.sharepoint.com/:i:/r/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
-        const sharePointSuffix = ".jpeg?csf=1&web=1&e=eg9pzT";
-
         loadDataButton.addEventListener('click', handleFileUpload);
-        document.getElementById('download-sample').addEventListener('click', downloadSampleExcel);
         document.getElementById('apply-filters').addEventListener('click', plotDataOnMap);
         document.getElementById('clear-filters').addEventListener('click', resetAllFilters);
-
-        function getRowValue(row, possibleNames) {
-            for (let name of possibleNames) {
-                if (row.hasOwnProperty(name)) return row[name];
-                const keys = Object.keys(row);
-                const match = keys.find(k => k.toLowerCase().trim() === name.toLowerCase().trim());
-                if (match) return row[match];
-            }
-            return undefined;
-        }
-
-        /**
-         * Strict Tag Value Getter to separate Inventory (Old) and Deployment (New) tags.
-         */
-        function getTagValue(row, switchNum, isNew = false) {
-            if (isNew) {
-                if (switchNum === 1) return row['Tag 1_1'] || row['Tag 1'] || '-';
-                if (switchNum === 2) return row['Tag 2_1'] || '-';
-                if (switchNum === 3) return row['Tag 3_1'] || '-';
-                return '-';
-            } else {
-                if (switchNum === 1) return row['TAG 1'] || '-';
-                if (switchNum === 2) return row['Tag 2'] || '-';
-                if (switchNum === 3) return row['Tag 3'] || '-';
-                return '-';
-            }
-        }
-
-        /**
-         * Floating Image Viewer Logic
-         */
-        function viewImage(url, title) {
-            const viewer = document.getElementById('image-viewer');
-            const img = document.getElementById('viewer-img');
-            const caption = document.getElementById('viewer-caption');
-            img.src = url;
-            caption.textContent = title;
-            viewer.style.display = 'flex';
-        }
-
-        /**
-         * SharePoint Tag Photo Link (Now triggers internal viewer)
-         */
-        function renderNewTagLink(tagValue) {
-            const rawTag = String(tagValue || '').trim();
-            if (!rawTag || rawTag === '-' || rawTag.toLowerCase() === 'n/a') return '-';
-            
-            const cleanedTag = encodeURIComponent(rawTag);
-            const fullUrl = `${sharePointBase}${cleanedTag}${sharePointSuffix}`;
-            
-            // Presented as an interactive button/link that opens the image overlay
-            return `<button onclick="viewImage('${fullUrl}', 'Tag Photo - ${rawTag}')" class="text-indigo-600 hover:text-indigo-800 underline font-bold transition-colors">#${rawTag}</button>`;
-        }
-
-        /**
-         * Helper to construct Before/After deployment image links using SharePoint path
-         */
-        function renderDeploymentImageLinks(ip) {
-            const rawIp = String(ip || '').trim();
-            if (!rawIp || rawIp === '-' || rawIp.toLowerCase() === 'n/a') return '-';
-            
-            // Convert 10.0.5.2 to 10-0-5-2
-            const dashIp = rawIp.replace(/\./g, '-');
-            const beforeUrl = `${sharePointBase}a${dashIp}${sharePointSuffix}`;
-            const afterUrl = `${sharePointBase}d${dashIp}${sharePointSuffix}`;
-
-            return `
-                <div class="flex gap-2 mt-1">
-                    <button onclick="viewImage('${beforeUrl}', 'Before Deployment - ${rawIp}')" class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded border border-amber-200 hover:bg-amber-200 font-bold transition-colors">Before</button>
-                    <button onclick="viewImage('${afterUrl}', 'After Deployment - ${rawIp}')" class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 hover:bg-emerald-200 font-bold transition-colors">After</button>
-                </div>
-            `;
-        }
-
-        function parseToDate(val) {
-            if (!val) return null;
-            if (val instanceof Date) return val;
-            if (typeof val === 'number' && val > 30000 && val < 60000) return new Date((val - 25569) * 86400 * 1000);
-            const d = new Date(val);
-            return isNaN(d.getTime()) ? null : d;
-        }
 
         function handleFileUpload() {
             const file = fileUpload.files[0];
@@ -295,14 +317,12 @@
                     const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
                     const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
                     if (json.length === 0) throw new Error("File is empty.");
-                    if (!getRowValue(json[0], ['Latitude']) || !getRowValue(json[0], ['Longitude'])) throw new Error("Coordinates not found.");
-                    
                     allSwitchData = json;
                     initializeFilters(allSwitchData);
                     plotDataOnMap();
                     filterSection.classList.remove('hidden');
                 } catch (err) {
-                    showError(err.message || "Error reading Excel file.");
+                    showError("Error processing file. Ensure columns 'Latitude' and 'Longitude' are present.");
                 } finally {
                     showLoading(false);
                 }
@@ -326,16 +346,10 @@
             });
             populateSelect(modelSelect, models);
             populateSelect(typeSelect, types);
-            if (networks.size > 0) {
-                populateSelect(networkSelect, networks);
-                networkWrapper.classList.remove('hidden');
-            } else {
-                networkWrapper.classList.add('hidden');
-            }
+            populateSelect(networkSelect, networks);
             if (dates.length > 0) {
-                const min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
-                dateFromInput.value = min.toISOString().split('T')[0];
-                dateToInput.value = max.toISOString().split('T')[0];
+                dateFromInput.value = new Date(Math.min(...dates)).toISOString().split('T')[0];
+                dateToInput.value = new Date(Math.max(...dates)).toISOString().split('T')[0];
             }
         }
 
@@ -349,15 +363,15 @@
         }
 
         function plotDataOnMap() {
-            const selectedModels = Array.from(modelSelect.selectedOptions).map(o => o.value);
-            const selectedTypes = Array.from(typeSelect.selectedOptions).map(o => o.value);
-            const selectedNetworks = Array.from(networkSelect.selectedOptions).map(o => o.value);
+            const selModels = Array.from(modelSelect.selectedOptions).map(o => o.value);
+            const selTypes = Array.from(typeSelect.selectedOptions).map(o => o.value);
+            const selNets = Array.from(networkSelect.selectedOptions).map(o => o.value);
             const from = dateFromInput.value ? new Date(dateFromInput.value) : null;
             const to = dateToInput.value ? new Date(dateToInput.value) : null;
             if (to) to.setHours(23,59,59);
 
             markers.clearLayers();
-            let count = 0, swCount = 0, modelSums = {};
+            let count = 0, swTotal = 0, sums = {};
 
             allSwitchData.forEach(row => {
                 const lat = parseFloat(getRowValue(row, ['Latitude'])), lon = parseFloat(getRowValue(row, ['Longitude']));
@@ -367,87 +381,43 @@
                 const s1 = getRowValue(row, ['Switch 1']), s2 = getRowValue(row, ['Switch 2']), s3 = getRowValue(row, ['Switch 3']);
                 const type = String(getRowValue(row, ['Branch or Moex', 'Type']) || '').trim();
                 const network = String(getRowValue(row, ['NETWORK', 'Network', 'Segment']) || '').trim();
-                const stack = String(getRowValue(row, ['Stack']) || '').trim().toUpperCase();
                 const closure = getRowValue(row, ['Hora de Cierre', 'Hora de Cieere']) || '-';
 
-                const modelMatch = selectedModels.length === 0 || [s1, s2, s3].some(s => selectedModels.includes(String(s || '').trim()));
-                const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(type);
-                const netMatch = selectedNetworks.length === 0 || selectedNetworks.includes(network);
-                const dateMatch = !rowDate || ((!from || rowDate >= from) && (!to || rowDate <= to));
+                const mMatch = selModels.length === 0 || [s1, s2, s3].some(s => selModels.includes(String(s || '').trim()));
+                const tMatch = selTypes.length === 0 || selTypes.includes(type);
+                const nMatch = selNets.length === 0 || selNets.includes(network);
+                const dMatch = !rowDate || ((!from || rowDate >= from) && (!to || rowDate <= to));
 
-                if (modelMatch && typeMatch && netMatch && dateMatch) {
+                if (mMatch && tMatch && nMatch && dMatch) {
                     const complete = String(getRowValue(row, ['Complete']) || '').trim().toUpperCase() === 'Y';
                     const icon = complete ? redIcon : (type.toUpperCase() === 'BRANCH' ? greenIcon : blackIcon);
                     
                     const popup = `<div class="min-w-[280px]">
-                        <h3 class="font-bold text-gray-900 border-b pb-1 mb-2 text-sm flex justify-between items-center">
-                            <span>${getRowValue(row, ['Location']) || 'Unknown Location'}</span>
-                            <span class="text-[9px] bg-indigo-50 px-2 py-0.5 rounded text-indigo-600 border border-indigo-100 font-medium">Close: ${closure}</span>
+                        <h3 class="font-bold text-gray-900 border-b pb-1 mb-2 text-sm flex justify-between">
+                            <span>${getRowValue(row, ['Location']) || 'Unknown Site'}</span>
+                            <span class="text-[9px] text-indigo-500 font-medium">Close: ${closure}</span>
                         </h3>
-                        
-                        <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] mb-4">
-                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Pueblo</span> <span class="font-medium">${getRowValue(row, ['Pueblo']) || '-'}</span></div>
-                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Network IP</span> <span class="font-medium font-mono">${network || '-'}</span></div>
-                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Type</span> <span class="font-medium">${type || '-'}</span></div>
-                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Stacked?</span> <span class="font-medium">${stack === 'Y' ? 'Yes' : 'No'}</span></div>
-                            <div>
-                                <span class="text-gray-400 font-bold uppercase text-[9px] block">Software</span> 
-                                <span class="font-medium">${getRowValue(row, ['Version']) || '-'}</span>
-                            </div>
-                            <div>
-                                <span class="text-gray-400 font-bold uppercase text-[9px] block">Deployment</span> 
-                                <span class="font-medium">${rowDate ? rowDate.toLocaleDateString() : '-'}</span>
-                            </div>
+                        <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] mb-3">
+                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Pueblo</span> <span>${getRowValue(row, ['Pueblo']) || '-'}</span></div>
+                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Network IP</span> <span class="font-mono">${network || '-'}</span></div>
+                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Software</span> <span>${getRowValue(row, ['Version']) || '-'}</span></div>
+                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Deployment</span> <span>${rowDate ? rowDate.toLocaleDateString() : '-'}</span></div>
                         </div>
-
-                        <!-- Deploy Photos Section -->
-                        <div class="mb-4">
+                        <div class="mb-3">
                             <span class="text-gray-400 font-bold uppercase text-[9px] block mb-1">Deployment Photos</span>
                             ${renderDeploymentImageLinks(network)}
                         </div>
-                        
-                        <!-- Inventory Reference Section -->
-                        <div class="bg-gray-50 p-2.5 rounded border border-gray-200 text-[10px] space-y-2 mb-3">
-                            <div class="flex items-center gap-1.5 text-[9px] uppercase text-gray-400 tracking-wider font-bold mb-1">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                                Inventory Reference
-                            </div>
-                            <div>
-                                <div class="flex justify-between"><b>Sw1:</b> <span>${s1 || 'N/A'}</span></div>
-                                <div class="text-gray-400 text-[9px] pl-2 border-l border-gray-200 ml-1 mt-0.5">S/N: ${getRowValue(row, ['Serial No-1']) || '-'} | <span class="text-gray-500 font-semibold">Tag: ${getTagValue(row, 1, false)}</span></div>
-                            </div>
-                            ${s2 && String(s2).toUpperCase() !== 'N/A' ? `
-                            <div>
-                                <div class="flex justify-between"><b>Sw2:</b> <span>${s2}</span></div>
-                                <div class="text-gray-400 text-[9px] pl-2 border-l border-gray-200 ml-1 mt-0.5">S/N: ${getRowValue(row, ['Serial No-2']) || '-'} | <span class="text-gray-500 font-semibold">Tag: ${getTagValue(row, 2, false)}</span></div>
-                            </div>` : ''}
-                            ${s3 && String(s3).toUpperCase() !== 'N/A' ? `
-                            <div>
-                                <div class="flex justify-between"><b>Sw3:</b> <span>${s3}</span></div>
-                                <div class="text-gray-400 text-[9px] pl-2 border-l border-gray-200 ml-1 mt-0.5">S/N: ${getRowValue(row, ['Serial No -3']) || '-'} | <span class="text-gray-500 font-semibold">Tag: ${getTagValue(row, 3, false)}</span></div>
-                            </div>` : ''}
+                        <div class="bg-gray-50 p-2 rounded border border-gray-200 text-[10px] space-y-2 mb-2">
+                            <b class="text-[9px] uppercase text-gray-400 block border-b pb-0.5">Inventory Reference</b>
+                            <div><b>Sw1:</b> ${s1 || 'N/A'} <div class="text-gray-400 pl-2">S/N: ${getRowValue(row, ['Serial No-1']) || '-'} | Tag: ${getTagValue(row, 1, false)}</div></div>
+                            ${s2 && s2 !== 'N/A' ? `<div><b>Sw2:</b> ${s2} <div class="text-gray-400 pl-2">S/N: ${getRowValue(row, ['Serial No-2']) || '-'} | Tag: ${getTagValue(row, 2, false)}</div></div>` : ''}
+                            ${s3 && s3 !== 'N/A' ? `<div><b>Sw3:</b> ${s3} <div class="text-gray-400 pl-2">S/N: ${getRowValue(row, ['Serial No -3']) || '-'} | Tag: ${getTagValue(row, 3, false)}</div></div>` : ''}
                         </div>
-
-                        <!-- Deployment Section -->
-                        <div class="bg-indigo-50/40 p-2.5 rounded border border-indigo-100 text-[10px] space-y-2">
-                            <div class="flex items-center gap-1.5 text-[9px] uppercase text-indigo-400 tracking-wider font-bold mb-1">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                                New Deployment Data
-                            </div>
-                            <div>
-                                <div class="flex justify-between"><b class="text-indigo-900">Sw1 S/N:</b> <span>${getRowValue(row, ['Serial No. No Switch 1']) || '-'}</span></div>
-                                <div class="text-indigo-400 text-[9px] pl-2 border-l border-indigo-100 ml-1 mt-0.5">New Tag: ${renderNewTagLink(getTagValue(row, 1, true))}</div>
-                            </div>
-                            ${getRowValue(row, ['Serial No NEW  Switch 2']) ? `
-                            <div>
-                                <div class="flex justify-between"><b class="text-indigo-900">Sw2 S/N:</b> <span>${getRowValue(row, ['Serial No NEW  Switch 2'])}</span></div>
-                                <div class="text-indigo-400 text-[9px] pl-2 border-l border-indigo-100 ml-1 mt-0.5">New Tag: ${renderNewTagLink(getTagValue(row, 2, true))}</div>
-                            </div>` : ''}
-                            ${getRowValue(row, ['Serial No. W Switch 3']) ? `
-                            <div>
-                                <div class="flex justify-between"><b class="text-indigo-900">Sw3 S/N:</b> <span>${getRowValue(row, ['Serial No. W Switch 3'])}</span></div>
-                                <div class="text-indigo-400 text-[9px] pl-2 border-l border-indigo-100 ml-1 mt-0.5">New Tag: ${renderNewTagLink(getTagValue(row, 3, true))}</div>
-                            </div>` : ''}
+                        <div class="bg-indigo-50/50 p-2 rounded border border-indigo-100 text-[10px] space-y-2">
+                            <b class="text-[9px] uppercase text-indigo-400 block border-b border-indigo-100 pb-0.5">New Deployment Data</b>
+                            <div><b class="text-indigo-900">Sw1 New:</b> ${getRowValue(row, ['Serial No. No Switch 1']) || '-'} <div class="pl-2">Tag: ${renderNewTagLink(getTagValue(row, 1, true))}</div></div>
+                            ${getRowValue(row, ['Serial No NEW  Switch 2']) ? `<div><b class="text-indigo-900">Sw2 New:</b> ${getRowValue(row, ['Serial No NEW  Switch 2'])} <div class="pl-2">Tag: ${renderNewTagLink(getTagValue(row, 2, true))}</div></div>` : ''}
+                            ${getRowValue(row, ['Serial No. W Switch 3']) ? `<div><b class="text-indigo-900">Sw3 New:</b> ${getRowValue(row, ['Serial No. W Switch 3'])} <div class="pl-2">Tag: ${renderNewTagLink(getTagValue(row, 3, true))}</div></div>` : ''}
                         </div>
                     </div>`;
 
@@ -455,25 +425,24 @@
                     count++;
                     [s1, s2, s3].forEach(s => {
                         if (s && String(s).toUpperCase() !== 'N/A') {
-                            swCount++;
+                            swTotal++;
                             const key = String(s).trim();
-                            modelSums[key] = (modelSums[key] || 0) + 1;
+                            sums[key] = (sums[key] || 0) + 1;
                         }
                     });
                 }
             });
-
-            updateStatus(count, swCount, modelSums);
+            updateStatus(count, swTotal, sums);
         }
 
-        function updateStatus(plotted, totalSw, modelSums) {
-            if (plotted > 0) {
-                let list = '<div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-3">';
-                Object.keys(modelSums).sort().forEach(m => { list += `<div class="text-[11px]"><b class="text-gray-600">${m}:</b> ${modelSums[m]}</div>`; });
+        function updateStatus(sites, total, sums) {
+            if (sites > 0) {
+                let list = '<div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">';
+                Object.keys(sums).sort().forEach(m => { list += `<div class="text-[11px]"><b class="text-gray-600">${m}:</b> ${sums[m]}</div>`; });
                 list += '</div>';
-                statusMessage.innerHTML = `<div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 text-left">
-                    <p class="font-bold text-indigo-900">${plotted} Sites mapped <span class="text-gray-400 font-normal">(${totalSw} hardware units)</span></p>
-                    <p class="text-[10px] uppercase font-black text-gray-300 mt-4 tracking-widest border-b pb-1">Inventory Breakdown</p>${list}</div>`;
+                statusMessage.innerHTML = `<div class="bg-white p-4 rounded-lg border text-left">
+                    <p class="font-bold text-indigo-900">${sites} Sites matched <span class="font-normal text-gray-400">(${total} units total)</span></p>
+                    <p class="text-[10px] uppercase font-bold text-gray-300 mt-3 border-b">Inventory Breakdown</p>${list}</div>`;
                 statusMessage.classList.remove('text-center');
             } else {
                 statusMessage.innerHTML = "No sites match the current filter selection.";
@@ -483,31 +452,29 @@
 
         function resetAllFilters() {
             [modelSelect, typeSelect, networkSelect].forEach(s => Array.from(s.options).forEach(o => o.selected = false));
-            const dates = allSwitchData.map(r => parseToDate(getRowValue(r, ['Date', 'Installation Date']))).filter(d => d);
-            if (dates.length) {
-                dateFromInput.value = new Date(Math.min(...dates)).toISOString().split('T')[0];
-                dateToInput.value = new Date(Math.max(...dates)).toISOString().split('T')[0];
-            }
             plotDataOnMap();
         }
 
-        function downloadSampleExcel(e) {
-            e.preventDefault();
-            const data = [{ 
-                Date: '2026-01-20', Location: 'Main Plaza', Pueblo: 'San Juan', 'Branch or Moex': 'Branch', NETWORK: '10.0.1.1', Stack: 'Y', 
-                Latitude: 18.466, Longitude: -66.105, 'Switch 1': 'C9300-48P', 'Serial No-1': 'INV-OLD-S1', 'TAG 1': 'TAG-OLD-1', 
-                'Serial No. No Switch 1': 'NEW-S1-SN', 'Tag 1': '78819', 'Hora de Cierre': '5:00 PM', Complete: 'N' 
-            }];
-            const sheet = XLSX.utils.json_to_sheet(data);
-            const book = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(book, sheet, 'Switches');
-            XLSX.writeFile(book, 'Master_Inventory_Template.xlsx');
+        function parseToDate(val) {
+            if (!val) return null;
+            if (val instanceof Date) return val;
+            if (typeof val === 'number' && val > 30000 && val < 60000) return new Date((val - 25569) * 86400 * 1000);
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
         }
 
         function showLoading(s) { loadingIndicator.classList.toggle('hidden', !s); }
         function showError(m) { errorMessage.textContent = m; errorMessage.classList.remove('hidden'); }
         function hideError() { errorMessage.classList.add('hidden'); }
-        function resetStatusMessage() { statusMessage.innerHTML = "Upload a Master Inventory file to begin."; statusMessage.classList.add('text-center'); }
+
+        function downloadSampleExcel(e) {
+            e.preventDefault();
+            const data = [{ Date: '2026-01-20', Location: 'Sample Plaza', Pueblo: 'San Juan', 'Branch or Moex': 'Branch', NETWORK: '10.0.1.1', Latitude: 18.46, Longitude: -66.11, 'Switch 1': 'C9300-48P', 'Serial No-1': 'OLD-SN', 'TAG 1': 'OLD-TAG', 'Serial No. No Switch 1': 'NEW-SN', 'Tag 1': '78819', Complete: 'N' }];
+            const sheet = XLSX.utils.json_to_sheet(data);
+            const book = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(book, sheet, 'Switches');
+            XLSX.writeFile(book, 'Cisco_Map_Template.xlsx');
+        }
     </script>
 </body>
 </html>
