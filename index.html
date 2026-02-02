@@ -194,6 +194,10 @@
         const dateFromInput = document.getElementById('date-from');
         const dateToInput = document.getElementById('date-to');
 
+        // Centralized SharePoint Configuration
+        const sharePointBase = "https://intwoglobal-my.sharepoint.com/:i:/r/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
+        const sharePointSuffix = ".jpeg?csf=1&web=1&e=eg9pzT";
+
         loadDataButton.addEventListener('click', handleFileUpload);
         document.getElementById('download-sample').addEventListener('click', downloadSampleExcel);
         document.getElementById('apply-filters').addEventListener('click', plotDataOnMap);
@@ -227,19 +231,6 @@
         }
 
         /**
-         * SharePoint Tag Photo Link
-         */
-        function renderNewTagLink(tagValue) {
-            const rawTag = String(tagValue || '').trim();
-            if (!rawTag || rawTag === '-' || rawTag.toLowerCase() === 'n/a') return '-';
-            const cleanedTag = encodeURIComponent(rawTag);
-            const baseUrl = "https://intwoglobal-my.sharepoint.com/:i:/r/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
-            const suffix = ".jpeg?csf=1&web=1&e=eg9pzT";
-            const fullUrl = `${baseUrl}${cleanedTag}${suffix}`;
-            return `<a href="${fullUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline font-bold">${rawTag}</a>`;
-        }
-
-        /**
          * Floating Image Viewer Logic
          */
         function viewImage(url, title) {
@@ -252,7 +243,21 @@
         }
 
         /**
-         * Helper to construct Before/After deployment image links
+         * SharePoint Tag Photo Link (Now triggers internal viewer)
+         */
+        function renderNewTagLink(tagValue) {
+            const rawTag = String(tagValue || '').trim();
+            if (!rawTag || rawTag === '-' || rawTag.toLowerCase() === 'n/a') return '-';
+            
+            const cleanedTag = encodeURIComponent(rawTag);
+            const fullUrl = `${sharePointBase}${cleanedTag}${sharePointSuffix}`;
+            
+            // Presented as an interactive button/link that opens the image overlay
+            return `<button onclick="viewImage('${fullUrl}', 'Tag Photo - ${rawTag}')" class="text-indigo-600 hover:text-indigo-800 underline font-bold transition-colors">#${rawTag}</button>`;
+        }
+
+        /**
+         * Helper to construct Before/After deployment image links using SharePoint path
          */
         function renderDeploymentImageLinks(ip) {
             const rawIp = String(ip || '').trim();
@@ -260,9 +265,8 @@
             
             // Convert 10.0.5.2 to 10-0-5-2
             const dashIp = rawIp.replace(/\./g, '-');
-            const baseUrl = "https://switchmap.onrender.com/";
-            const beforeUrl = `${baseUrl}a${dashIp}.jpeg`;
-            const afterUrl = `${baseUrl}d${dashIp}.jpeg`;
+            const beforeUrl = `${sharePointBase}a${dashIp}${sharePointSuffix}`;
+            const afterUrl = `${sharePointBase}d${dashIp}${sharePointSuffix}`;
 
             return `
                 <div class="flex gap-2 mt-1">
