@@ -34,7 +34,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.95);
+            background: rgba(0, 0, 0, 0.9);
             z-index: 10000;
             flex-direction: column;
             justify-content: center;
@@ -58,14 +58,14 @@
             background: #111;
             border-radius: 8px;
             border: 1px solid #333;
-            overflow: auto;
+            overflow: hidden;
         }
         #viewer-img {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            background: #222;
+            transition: opacity 0.3s ease;
         }
         .viewer-btn {
             background: #4f46e5;
@@ -76,6 +76,8 @@
             text-decoration: none;
             font-size: 0.85rem;
             transition: background 0.2s;
+            cursor: pointer;
+            border: none;
         }
         .viewer-btn:hover { background: #4338ca; }
         .close-x {
@@ -86,21 +88,23 @@
             background: transparent;
             border: none;
         }
-        #viewer-copy-btn {
-            background: #10b981;
-        }
+        #viewer-copy-btn { background: #10b981; }
         #viewer-copy-btn:hover { background: #059669; }
 
         /* Loading Spinner */
         #viewer-loader {
             display: none;
             position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             width: 50px;
             height: 50px;
-            border: 5px solid rgba(255,255,255,0.3);
+            border: 5px solid rgba(255,255,255,0.2);
             border-radius: 50%;
             border-top-color: #fff;
             animation: spin 1s ease-in-out infinite;
+            z-index: 10;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
@@ -119,6 +123,7 @@
         </div>
         <div id="viewer-container">
             <div id="viewer-loader"></div>
+            <!-- Use img tag with referrerpolicy to try bypassing simple referrer checks -->
             <img id="viewer-img" src="" alt="Deployment Photo" referrerpolicy="no-referrer">
         </div>
         <div class="text-gray-400 text-xs mt-4 text-center max-w-2xl px-4">
@@ -181,7 +186,7 @@
             </div>
             <div class="mt-6 flex gap-3 border-t pt-4">
                 <button id="apply-filters" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 shadow-sm transition-all">Apply Filters</button>
-                <button id="clear-filters" class="px-6 py-2 bg-gray-100 text-gray-600 font-bold rounded-md hover:bg-gray-300 transition-all">Reset All</button>
+                <button id="clear-filters" class="px-6 py-2 bg-gray-100 text-gray-600 font-bold rounded-md hover:bg-gray-200 transition-all">Reset All</button>
             </div>
         </div>
 
@@ -192,7 +197,7 @@
         </div>
 
         <footer class="mt-8 text-center text-gray-400 text-[10px] uppercase tracking-widest pb-8">
-            Version: 0202 | Build: 2029
+            Version: 0202 | Build: 2155
         </footer>
     </div>
 
@@ -247,7 +252,7 @@
         }
 
         // --- Content Viewer ---
-        window.openViewer = function(url, title) {
+        window.openViewer = function(fullUrl, title) {
             const viewer = document.getElementById('content-viewer');
             const img = document.getElementById('viewer-img');
             const titleEl = document.getElementById('viewer-title');
@@ -256,12 +261,15 @@
             const loader = document.getElementById('viewer-loader');
             
             titleEl.textContent = title;
-            extLink.href = url;
+            extLink.href = fullUrl; // External link keeps full URL with web=1 for viewer
             
-            // Show loader, hide image until loaded
+            // KEY FIX: Strip web=1 to attempt loading raw image in overlay
+            // This transforms the viewer URL into a raw file URL for the <img> tag
+            let displayUrl = fullUrl.replace('&web=1', '').replace('?web=1', '');
+            
             loader.style.display = 'block';
             img.style.opacity = '0';
-            img.src = url;
+            img.src = displayUrl; 
             
             img.onload = () => {
                 loader.style.display = 'none';
@@ -270,11 +278,13 @@
             
             img.onerror = () => {
                 loader.style.display = 'none';
+                // Don't show alt text to avoid clutter, user will see the instruction text below
             };
 
+            // Fix Copy Path: ensure we copy the FULL URL, not just what's in src
             copyBtn.onclick = () => {
                 const tempInput = document.createElement('input');
-                tempInput.value = url;
+                tempInput.value = fullUrl; // Copy full valid URL
                 document.body.appendChild(tempInput);
                 tempInput.select();
                 document.execCommand('copy');
@@ -318,9 +328,9 @@
         function renderNewTagLink(tagValue) {
             let tag = String(tagValue || '').trim();
             if (!tag || tag === '-' || tag.toLowerCase() === 'n/a') return '-';
-            // Strip leading # if present
-            if (tag.startsWith('#')) tag = tag.substring(1);
+            tag = tag.replace(/^#/, '').trim();
             const fullUrl = `${sharePointBase}${encodeURIComponent(tag)}${sharePointSuffix}`;
+            // Pass fullUrl to openViewer, which handles the display logic
             return `<a href="${fullUrl}" onclick="event.preventDefault(); window.openViewer('${fullUrl}', 'Tag Photo - ${tag}')" class="text-indigo-600 hover:text-indigo-800 underline font-bold">#${tag}</a>`;
         }
 
@@ -332,8 +342,8 @@
             const afterUrl = `${sharePointBase}d${dashIp}${sharePointSuffix}`;
             return `
                 <div class="flex gap-2 mt-1">
-                    <a href="${beforeUrl}" onclick="event.preventDefault(); window.openViewer('${beforeUrl}', 'Before Photo - ${rawIp}')" class="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200 font-bold no-underline inline-block">Before</a>
-                    <a href="${afterUrl}" onclick="event.preventDefault(); window.openViewer('${afterUrl}', 'After Photo - ${rawIp}')" class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-200 font-bold no-underline inline-block">After</a>
+                    <a href="${beforeUrl}" onclick="event.preventDefault(); window.openViewer('${beforeUrl}', 'Before Photo - ${rawIp}')" class="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded border border-amber-200 hover:bg-amber-200 font-bold no-underline inline-block transition-colors">Before</a>
+                    <a href="${afterUrl}" onclick="event.preventDefault(); window.openViewer('${afterUrl}', 'After Photo - ${rawIp}')" class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-200 font-bold no-underline inline-block transition-colors">After</a>
                 </div>`;
         }
 
@@ -507,6 +517,15 @@
         function showLoading(s) { loadingIndicator.classList.toggle('hidden', !s); }
         function showError(m) { errorMessage.textContent = m; errorMessage.classList.remove('hidden'); }
         function hideError() { errorMessage.classList.add('hidden'); }
+
+        function downloadSampleExcel(e) {
+            e.preventDefault();
+            const data = [{ Date: '2026-01-20', Location: 'Sample Plaza', Pueblo: 'San Juan', 'Branch or Moex': 'Branch', NETWORK: '10.0.1.1', Latitude: 18.46, Longitude: -66.11, 'Switch 1': 'C9300-48P', 'Serial No-1': 'OLD-SN', 'TAG 1': 'OLD-TAG', 'Serial No. No Switch 1': 'NEW-SN', 'Tag 1': '78819', Complete: 'N' }];
+            const sheet = XLSX.utils.json_to_sheet(data);
+            const book = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(book, sheet, 'Switches');
+            XLSX.writeFile(book, 'Cisco_Map_Template.xlsx');
+        }
     </script>
 </body>
 </html>
