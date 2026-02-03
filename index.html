@@ -190,10 +190,14 @@
         <div id="status-message" class="mt-4 text-gray-500 text-sm text-center py-4">
             Upload a Master Inventory file to begin.
         </div>
+
+        <footer class="mt-8 text-center text-gray-400 text-[10px] uppercase tracking-widest pb-8">
+            Version: 0202 | Build: 2029
+        </footer>
     </div>
 
     <script>
-        // Global variables
+        // --- Global Variables & Icons ---
         let allSwitchData = [];
         let map, markers;
 
@@ -234,7 +238,7 @@
                     const div = L.DomUtil.create('div', 'legend bg-white p-3 rounded shadow-lg border border-gray-100');
                     div.innerHTML = `<h4 class="font-bold text-xs uppercase text-gray-400 mb-2 border-b pb-1">Legend</h4>
                         <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png" class="w-3 mr-2"> <span class="text-xs">Complete</span></div>
-                        <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png" class="text-xs"> <span class="text-xs">Branch</span></div>
+                        <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png" class="w-3 mr-2"> <span class="text-xs">Branch</span></div>
                         <div class="flex items-center"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png" class="w-3 mr-2"> <span class="text-xs">Moex / Other</span></div>`;
                     return div;
                 };
