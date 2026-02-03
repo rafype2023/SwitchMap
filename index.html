@@ -51,13 +51,22 @@
         #viewer-container {
             width: 90%;
             height: 80%;
-            background: #fff;
-            border-radius: 8px;
-            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             position: relative;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            background: #111;
+            border-radius: 8px;
+            border: 1px solid #333;
+            overflow: auto;
         }
-        #viewer-frame { width: 100%; height: 100%; border: none; }
+        #viewer-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            background: #222;
+        }
         .viewer-btn {
             background: #4f46e5;
             color: white;
@@ -65,7 +74,10 @@
             border-radius: 4px;
             font-weight: bold;
             text-decoration: none;
+            font-size: 0.85rem;
+            transition: background 0.2s;
         }
+        .viewer-btn:hover { background: #4338ca; }
         .close-x {
             color: white;
             font-size: 40px;
@@ -74,6 +86,23 @@
             background: transparent;
             border: none;
         }
+        #viewer-copy-btn {
+            background: #10b981;
+        }
+        #viewer-copy-btn:hover { background: #059669; }
+
+        /* Loading Spinner */
+        #viewer-loader {
+            display: none;
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800">
@@ -81,17 +110,19 @@
     <!-- Content Viewer Overlay -->
     <div id="content-viewer">
         <div id="viewer-header">
-            <div id="viewer-title" class="font-bold text-lg"></div>
-            <div class="flex gap-4 items-center">
-                <a id="viewer-external" href="#" target="_blank" class="viewer-btn text-sm">Open in SharePoint</a>
+            <div id="viewer-title" class="font-bold text-lg truncate pr-4"></div>
+            <div class="flex gap-3 items-center shrink-0">
+                <button id="viewer-copy-btn" class="viewer-btn">Copy Path</button>
+                <a id="viewer-external" href="#" target="_blank" class="viewer-btn">Open in SharePoint</a>
                 <button onclick="closeViewer()" class="close-x">&times;</button>
             </div>
         </div>
         <div id="viewer-container">
-            <iframe id="viewer-frame" src="about:blank"></iframe>
+            <div id="viewer-loader"></div>
+            <img id="viewer-img" src="" alt="Deployment Photo" referrerpolicy="no-referrer">
         </div>
-        <div class="text-gray-400 text-xs mt-4 text-center">
-            Note: If the preview is blank, SharePoint security is preventing embedding. Use the blue button above to open the file.
+        <div class="text-gray-400 text-xs mt-4 text-center max-w-2xl px-4">
+            If the image doesn't appear, use <b>"Open in SharePoint"</b>. Browser security may block photos if you aren't logged into SharePoint in this session.
         </div>
     </div>
 
@@ -126,7 +157,7 @@
 
         <!-- Filters Section -->
         <div id="filter-section" class="bg-white p-6 rounded-lg shadow-md mb-6 hidden border border-gray-200">
-            <h3 class="text-lg font-bold mb-4 text-gray-900">Inventory Filters</h3>
+            <h3 class="text-lg font-bold mb-4 text-gray-900 flex items-center gap-2">Filters</h3>
             <div id="filter-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Location Type</label>
@@ -150,11 +181,10 @@
             </div>
             <div class="mt-6 flex gap-3 border-t pt-4">
                 <button id="apply-filters" class="px-6 py-2 bg-indigo-600 text-white font-bold rounded-md hover:bg-indigo-700 shadow-sm transition-all">Apply Filters</button>
-                <button id="clear-filters" class="px-6 py-2 bg-gray-100 text-gray-600 font-bold rounded-md hover:bg-gray-200 transition-all">Reset All</button>
+                <button id="clear-filters" class="px-6 py-2 bg-gray-100 text-gray-600 font-bold rounded-md hover:bg-gray-300 transition-all">Reset All</button>
             </div>
         </div>
 
-        <!-- Map Container -->
         <div id="map"></div>
          
         <div id="status-message" class="mt-4 text-gray-500 text-sm text-center py-4">
@@ -163,51 +193,38 @@
     </div>
 
     <script>
-        // --- Global Variables & Icons ---
+        // Global variables
         let allSwitchData = [];
         let map, markers;
 
         const greenIcon = new L.Icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
         const blackIcon = new L.Icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-black.png',
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
         const redIcon = new L.Icon({
             iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
+            iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
 
-        // SharePoint Config
-        const sharePointBase = "https://intwoglobal-my.sharepoint.com/:i:/r/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
+        // SharePoint Configuration
+        const sharePointBase = "https://intwoglobal-my.sharepoint.com/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
         const sharePointSuffix = ".jpeg?csf=1&web=1&e=eg9pzT";
 
-        // --- App Initialization ---
-        window.onload = function() {
-            initMap();
-        };
+        window.onload = function() { initMap(); };
 
         function initMap() {
             try {
                 map = L.map('map').setView([18.2208, -66.5901], 9);
                 markers = L.layerGroup().addTo(map);
-
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '© OpenStreetMap contributors'
                 }).addTo(map);
@@ -217,36 +234,61 @@
                     const div = L.DomUtil.create('div', 'legend bg-white p-3 rounded shadow-lg border border-gray-100');
                     div.innerHTML = `<h4 class="font-bold text-xs uppercase text-gray-400 mb-2 border-b pb-1">Legend</h4>
                         <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png" class="w-3 mr-2"> <span class="text-xs">Complete</span></div>
-                        <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png" class="w-3 mr-2"> <span class="text-xs">Branch</span></div>
+                        <div class="flex items-center mb-1"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png" class="text-xs"> <span class="text-xs">Branch</span></div>
                         <div class="flex items-center"><img src="https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png" class="w-3 mr-2"> <span class="text-xs">Moex / Other</span></div>`;
                     return div;
                 };
                 legend.addTo(map);
-            } catch (e) {
-                console.error("Map initialization failed:", e);
-            }
+            } catch (e) { console.error("Map failed:", e); }
         }
 
-        // --- Content Viewer Logic ---
+        // --- Content Viewer ---
         window.openViewer = function(url, title) {
             const viewer = document.getElementById('content-viewer');
-            const frame = document.getElementById('viewer-frame');
+            const img = document.getElementById('viewer-img');
             const titleEl = document.getElementById('viewer-title');
             const extLink = document.getElementById('viewer-external');
+            const copyBtn = document.getElementById('viewer-copy-btn');
+            const loader = document.getElementById('viewer-loader');
             
             titleEl.textContent = title;
             extLink.href = url;
-            frame.src = url;
+            
+            // Show loader, hide image until loaded
+            loader.style.display = 'block';
+            img.style.opacity = '0';
+            img.src = url;
+            
+            img.onload = () => {
+                loader.style.display = 'none';
+                img.style.opacity = '1';
+            };
+            
+            img.onerror = () => {
+                loader.style.display = 'none';
+            };
+
+            copyBtn.onclick = () => {
+                const tempInput = document.createElement('input');
+                tempInput.value = url;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => copyBtn.textContent = 'Copy Path', 2000);
+            };
+
             viewer.style.display = 'flex';
         };
 
         window.closeViewer = function() {
             const viewer = document.getElementById('content-viewer');
-            document.getElementById('viewer-frame').src = 'about:blank';
+            document.getElementById('viewer-img').src = '';
             viewer.style.display = 'none';
         };
 
-        // --- Data Handling ---
+        // --- Data Helpers ---
         function getRowValue(row, possibleNames) {
             for (let name of possibleNames) {
                 if (row.hasOwnProperty(name)) return row[name];
@@ -270,15 +312,17 @@
         }
 
         function renderNewTagLink(tagValue) {
-            const tag = String(tagValue || '').trim();
+            let tag = String(tagValue || '').trim();
             if (!tag || tag === '-' || tag.toLowerCase() === 'n/a') return '-';
+            // Strip leading # if present
+            if (tag.startsWith('#')) tag = tag.substring(1);
             const fullUrl = `${sharePointBase}${encodeURIComponent(tag)}${sharePointSuffix}`;
             return `<a href="${fullUrl}" onclick="event.preventDefault(); window.openViewer('${fullUrl}', 'Tag Photo - ${tag}')" class="text-indigo-600 hover:text-indigo-800 underline font-bold">#${tag}</a>`;
         }
 
         function renderDeploymentImageLinks(ip) {
             const rawIp = String(ip || '').trim();
-            if (!rawIp || rawIp === '-' || rawIp.toLowerCase() === 'n/a') return '-';
+            if (!rawIp || rawIp === '-' || rawIp.toLowerCase() === 'n/a') return '';
             const dashIp = rawIp.replace(/\./g, '-');
             const beforeUrl = `${sharePointBase}a${dashIp}${sharePointSuffix}`;
             const afterUrl = `${sharePointBase}d${dashIp}${sharePointSuffix}`;
@@ -289,7 +333,7 @@
                 </div>`;
         }
 
-        // --- Event Listeners ---
+        // --- Core UI Logic ---
         const fileUpload = document.getElementById('file-upload');
         const loadDataButton = document.getElementById('load-data');
         const loadingIndicator = document.getElementById('loading');
@@ -304,11 +348,14 @@
 
         loadDataButton.addEventListener('click', handleFileUpload);
         document.getElementById('apply-filters').addEventListener('click', plotDataOnMap);
-        document.getElementById('clear-filters').addEventListener('click', resetAllFilters);
+        document.getElementById('clear-filters').addEventListener('click', () => {
+            [modelSelect, typeSelect, networkSelect].forEach(s => Array.from(s.options).forEach(o => o.selected = false));
+            plotDataOnMap();
+        });
 
         function handleFileUpload() {
             const file = fileUpload.files[0];
-            if (!file) { showError("Please select an Excel file."); return; }
+            if (!file) return;
             showLoading(true);
             hideError();
             const reader = new FileReader();
@@ -316,16 +363,13 @@
                 try {
                     const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
                     const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                    if (json.length === 0) throw new Error("File is empty.");
+                    if (json.length === 0) throw new Error("File empty");
                     allSwitchData = json;
                     initializeFilters(allSwitchData);
                     plotDataOnMap();
                     filterSection.classList.remove('hidden');
-                } catch (err) {
-                    showError("Error processing file. Ensure columns 'Latitude' and 'Longitude' are present.");
-                } finally {
-                    showLoading(false);
-                }
+                } catch (err) { showError("Error reading file."); }
+                finally { showLoading(false); }
             };
             reader.readAsArrayBuffer(file);
         }
@@ -394,17 +438,17 @@
                     
                     const popup = `<div class="min-w-[280px]">
                         <h3 class="font-bold text-gray-900 border-b pb-1 mb-2 text-sm flex justify-between">
-                            <span>${getRowValue(row, ['Location']) || 'Unknown Site'}</span>
+                            <span>${getRowValue(row, ['Location']) || 'Site'}</span>
                             <span class="text-[9px] text-indigo-500 font-medium">Close: ${closure}</span>
                         </h3>
-                        <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] mb-3">
+                        <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] mb-3">
                             <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Pueblo</span> <span>${getRowValue(row, ['Pueblo']) || '-'}</span></div>
-                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Network IP</span> <span class="font-mono">${network || '-'}</span></div>
+                            <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Network IP</span> <span class="font-mono text-indigo-600">${network || '-'}</span></div>
                             <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Software</span> <span>${getRowValue(row, ['Version']) || '-'}</span></div>
                             <div><span class="text-gray-400 font-bold uppercase text-[9px] block">Deployment</span> <span>${rowDate ? rowDate.toLocaleDateString() : '-'}</span></div>
                         </div>
                         <div class="mb-3">
-                            <span class="text-gray-400 font-bold uppercase text-[9px] block mb-1">Deployment Photos</span>
+                            <span class="text-gray-400 font-bold uppercase text-[9px] block mb-1 font-bold">Deployment Photos</span>
                             ${renderDeploymentImageLinks(network)}
                         </div>
                         <div class="bg-gray-50 p-2 rounded border border-gray-200 text-[10px] space-y-2 mb-2">
@@ -414,7 +458,7 @@
                             ${s3 && s3 !== 'N/A' ? `<div><b>Sw3:</b> ${s3} <div class="text-gray-400 pl-2">S/N: ${getRowValue(row, ['Serial No -3']) || '-'} | Tag: ${getTagValue(row, 3, false)}</div></div>` : ''}
                         </div>
                         <div class="bg-indigo-50/50 p-2 rounded border border-indigo-100 text-[10px] space-y-2">
-                            <b class="text-[9px] uppercase text-indigo-400 block border-b border-indigo-100 pb-0.5">New Deployment Data</b>
+                            <b class="text-[9px] uppercase text-indigo-400 block border-b border-indigo-100 pb-0.5 font-bold">New Deployment Data</b>
                             <div><b class="text-indigo-900">Sw1 New:</b> ${getRowValue(row, ['Serial No. No Switch 1']) || '-'} <div class="pl-2">Tag: ${renderNewTagLink(getTagValue(row, 1, true))}</div></div>
                             ${getRowValue(row, ['Serial No NEW  Switch 2']) ? `<div><b class="text-indigo-900">Sw2 New:</b> ${getRowValue(row, ['Serial No NEW  Switch 2'])} <div class="pl-2">Tag: ${renderNewTagLink(getTagValue(row, 2, true))}</div></div>` : ''}
                             ${getRowValue(row, ['Serial No. W Switch 3']) ? `<div><b class="text-indigo-900">Sw3 New:</b> ${getRowValue(row, ['Serial No. W Switch 3'])} <div class="pl-2">Tag: ${renderNewTagLink(getTagValue(row, 3, true))}</div></div>` : ''}
@@ -426,8 +470,7 @@
                     [s1, s2, s3].forEach(s => {
                         if (s && String(s).toUpperCase() !== 'N/A') {
                             swTotal++;
-                            const key = String(s).trim();
-                            sums[key] = (sums[key] || 0) + 1;
+                            const k = String(s).trim(); sums[k] = (sums[k] || 0) + 1;
                         }
                     });
                 }
@@ -437,22 +480,16 @@
 
         function updateStatus(sites, total, sums) {
             if (sites > 0) {
-                let list = '<div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">';
-                Object.keys(sums).sort().forEach(m => { list += `<div class="text-[11px]"><b class="text-gray-600">${m}:</b> ${sums[m]}</div>`; });
-                list += '</div>';
+                let breakdown = '<div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">';
+                Object.keys(sums).sort().forEach(m => { breakdown += `<div class="text-[11px]"><b class="text-gray-600">${m}:</b> ${sums[m]}</div>`; });
+                breakdown += '</div>';
                 statusMessage.innerHTML = `<div class="bg-white p-4 rounded-lg border text-left">
                     <p class="font-bold text-indigo-900">${sites} Sites matched <span class="font-normal text-gray-400">(${total} units total)</span></p>
-                    <p class="text-[10px] uppercase font-bold text-gray-300 mt-3 border-b">Inventory Breakdown</p>${list}</div>`;
+                    <p class="text-[10px] uppercase font-bold text-gray-300 mt-3 border-b">Inventory Breakdown</p>${breakdown}</div>`;
                 statusMessage.classList.remove('text-center');
             } else {
-                statusMessage.innerHTML = "No sites match the current filter selection.";
-                statusMessage.classList.add('text-center');
+                statusMessage.innerHTML = "No results found."; statusMessage.classList.add('text-center');
             }
-        }
-
-        function resetAllFilters() {
-            [modelSelect, typeSelect, networkSelect].forEach(s => Array.from(s.options).forEach(o => o.selected = false));
-            plotDataOnMap();
         }
 
         function parseToDate(val) {
@@ -466,15 +503,6 @@
         function showLoading(s) { loadingIndicator.classList.toggle('hidden', !s); }
         function showError(m) { errorMessage.textContent = m; errorMessage.classList.remove('hidden'); }
         function hideError() { errorMessage.classList.add('hidden'); }
-
-        function downloadSampleExcel(e) {
-            e.preventDefault();
-            const data = [{ Date: '2026-01-20', Location: 'Sample Plaza', Pueblo: 'San Juan', 'Branch or Moex': 'Branch', NETWORK: '10.0.1.1', Latitude: 18.46, Longitude: -66.11, 'Switch 1': 'C9300-48P', 'Serial No-1': 'OLD-SN', 'TAG 1': 'OLD-TAG', 'Serial No. No Switch 1': 'NEW-SN', 'Tag 1': '78819', Complete: 'N' }];
-            const sheet = XLSX.utils.json_to_sheet(data);
-            const book = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(book, sheet, 'Switches');
-            XLSX.writeFile(book, 'Cisco_Map_Template.xlsx');
-        }
     </script>
 </body>
 </html>
