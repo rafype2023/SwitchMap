@@ -95,7 +95,7 @@
         </div>
 
         <footer class="mt-8 text-center text-gray-400 text-[10px] uppercase tracking-widest pb-8">
-            Version: 0203 | Build: 2300
+            Version: 0204 | Build: 2360
         </footer>
     </div>
 
@@ -125,11 +125,27 @@
         // --- OneDrive/SharePoint URL Construction Constants ---
         const SP_VIEWER_BASE = "https://intwoglobal-my.sharepoint.com/personal/luis_ramirez_intwo_cloud/_layouts/15/onedrive.aspx";
         const SP_VIEW_ID = "171ae644-fdd2-425d-b901-5927cc10a6ba";
-        const SP_PARENT_PATH = "/personal/luis_ramirez_intwo_cloud/Documents/First Bank Swtiches 2026 Shared/Fotos Serial y Tag";
-        const SP_FILE_PATH_PREFIX = "/personal/luis_ramirez_intwo_cloud/Documents/First Bank Swtiches 2026 Shared/Fotos Serial y Tag/";
         
-        // This is still used for naming logic, but links will open in new tab
-        const SP_DIRECT_BASE = "https://intwoglobal-my.sharepoint.com/personal/luis_ramirez_intwo_cloud/Documents/First%20Bank%20Swtiches%202026%20Shared/Fotos%20Serial%20y%20Tag/";
+        // Base folder path (Shared Folder Root)
+        const SP_ROOT_PATH = "/personal/luis_ramirez_intwo_cloud/Documents/First Bank Swtiches 2026 Shared/Fotos Serial y Tag";
+        
+        // --- Helper to build the correct OneDrive Viewer URL for New Tab ---
+        function buildOneDriveUrl(filename, subfolder = '') {
+            // Determine full parent path
+            let parentPath = SP_ROOT_PATH;
+            if (subfolder) {
+                parentPath += "/" + subfolder;
+            }
+
+            // Determine full file path (ID)
+            const filePath = parentPath + "/" + filename;
+
+            const encodedId = encodeURIComponent(filePath);
+            const encodedParent = encodeURIComponent(parentPath);
+            const encodedViewId = encodeURIComponent(SP_VIEW_ID);
+            
+            return `${SP_VIEWER_BASE}?viewid=${encodedViewId}&id=${encodedId}&parent=${encodedParent}`;
+        }
 
         window.onload = function() { initMap(); };
 
@@ -152,16 +168,6 @@
                 };
                 legend.addTo(map);
             } catch (e) { console.error("Map failed:", e); }
-        }
-
-        // --- Helper to build the complex OneDrive Viewer URL ---
-        function buildOneDriveUrl(filename) {
-            const encodedId = encodeURIComponent(SP_FILE_PATH_PREFIX + filename);
-            const encodedParent = encodeURIComponent(SP_PARENT_PATH);
-            const encodedViewId = encodeURIComponent(SP_VIEW_ID);
-            
-            // This URL points to the viewer page, suitable for "Open in SharePoint"
-            return `${SP_VIEWER_BASE}?viewid=${encodedViewId}&id=${encodedId}&parent=${encodedParent}`;
         }
 
         // --- Data Helpers ---
@@ -192,8 +198,9 @@
             if (!tag || tag === '-' || tag.toLowerCase() === 'n/a') return '-';
             tag = tag.replace(/^#/, '').trim();
             const filename = `${tag}.jpeg`;
-            const fullUrl = buildOneDriveUrl(filename);
-            return `<a href="${fullUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline font-bold" title="Open in New Tab">#${tag}</a>`;
+            // Tags are now in the 'Tags' subfolder
+            const fullUrl = buildOneDriveUrl(filename, 'Tags');
+            return `<a href="${fullUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 underline font-bold" title="Open Tag Photo in New Tab">#${tag}</a>`;
         }
 
         function renderDeploymentImageLinks(ip) {
@@ -203,8 +210,9 @@
             const beforeFile = `a${dashIp}.jpeg`;
             const afterFile = `d${dashIp}.jpeg`;
             
-            const beforeUrl = buildOneDriveUrl(beforeFile);
-            const afterUrl = buildOneDriveUrl(afterFile);
+            // Deployment photos are now in the 'Racks' subfolder
+            const beforeUrl = buildOneDriveUrl(beforeFile, 'Racks');
+            const afterUrl = buildOneDriveUrl(afterFile, 'Racks');
 
             return `
                 <div class="flex gap-2 mt-1">
