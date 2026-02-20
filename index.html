@@ -95,8 +95,52 @@
             Upload a Master Inventory file to begin.
         </div>
 
+        <!-- Executive Dashboard -->
+        <div id="executive-dashboard" class="mt-6 hidden">
+            <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                Executive Dashboard
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Branch Progress -->
+                <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Branch Deployment</h3>
+                    <div class="flex items-end gap-2 mb-2">
+                        <span id="dash-branch-pct" class="text-3xl font-bold text-gray-800">0%</span>
+                        <span id="dash-branch-text" class="text-sm text-gray-500 mb-1">0 / 0 Completed</span>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-3 mb-1">
+                        <div id="dash-branch-bar" class="bg-emerald-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Moex Progress -->
+                <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Moex Deployment</h3>
+                    <div class="flex items-end gap-2 mb-2">
+                        <span id="dash-moex-pct" class="text-3xl font-bold text-gray-800">0%</span>
+                        <span id="dash-moex-text" class="text-sm text-gray-500 mb-1">0 / 0 Completed</span>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-3 mb-1">
+                        <div id="dash-moex-bar" class="bg-blue-500 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Switches Collected -->
+                <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-200">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex justify-between">
+                        <span>Switches Collected</span>
+                        <span id="dash-total-switches" class="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">0 Total</span>
+                    </h3>
+                    <div id="dash-models-list" class="space-y-3 max-h-[250px] overflow-y-auto pr-2">
+                        <!-- Model items injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <footer class="mt-8 text-center text-gray-400 text-[10px] uppercase tracking-widest pb-8">
-            Version: 0205 | Build: 2445
+            Version: 0206 | Build: 2500
         </footer>
     </div>
 
@@ -340,6 +384,12 @@
 
             markers.clearLayers();
             let count = 0, swTotal = 0, sums = {};
+            
+            // Executive Dashboard Counters
+            let dashBranchesTotal = 0, dashBranchesComp = 0;
+            let dashMoexTotal = 0, dashMoexComp = 0;
+            let collectedModels = {};
+            let collectedTotal = 0;
 
             allSwitchData.forEach(row => {
                 const lat = parseFloat(getRowValue(row, ['Latitude'])), lon = parseFloat(getRowValue(row, ['Longitude']));
@@ -360,6 +410,26 @@
                     const complete = String(getRowValue(row, ['Complete']) || '').trim().toUpperCase() === 'Y';
                     const icon = complete ? redIcon : (type.toUpperCase() === 'BRANCH' ? greenIcon : blackIcon);
                     
+                    // Populate Dashboard Counters
+                    const typeUpper = type.toUpperCase();
+                    if (typeUpper.includes('BRANCH')) {
+                        dashBranchesTotal++;
+                        if (complete) dashBranchesComp++;
+                    } else if (typeUpper.includes('MOEX')) {
+                        dashMoexTotal++;
+                        if (complete) dashMoexComp++;
+                    }
+
+                    if (complete) {
+                        [s1, s2, s3].forEach(s => {
+                            if (s && String(s).toUpperCase() !== 'N/A') {
+                                const k = String(s).trim();
+                                collectedModels[k] = (collectedModels[k] || 0) + 1;
+                                collectedTotal++;
+                            }
+                        });
+                    }
+
                     const popup = `<div class="min-w-[280px]">
                         <h3 class="font-bold text-gray-900 border-b pb-1 mb-2 text-sm flex justify-between">
                             <span>${getRowValue(row, ['Location']) || 'Site'}</span>
@@ -403,6 +473,54 @@
                 }
             });
             updateStatus(count, swTotal, sums);
+            updateDashboard(dashBranchesTotal, dashBranchesComp, dashMoexTotal, dashMoexComp, collectedModels, collectedTotal);
+        }
+
+        function updateDashboard(bTotal, bComp, mTotal, mComp, models, modelsTotal) {
+            const dashEl = document.getElementById('executive-dashboard');
+            if (bTotal === 0 && mTotal === 0) {
+                dashEl.classList.add('hidden');
+                return;
+            }
+            dashEl.classList.remove('hidden');
+
+            // Branch Stats
+            const bPct = bTotal > 0 ? Math.round((bComp / bTotal) * 100) : 0;
+            document.getElementById('dash-branch-pct').textContent = `${bPct}%`;
+            document.getElementById('dash-branch-text').textContent = `${bComp} / ${bTotal} Completed`;
+            document.getElementById('dash-branch-bar').style.width = `${bPct}%`;
+
+            // Moex Stats
+            const mPct = mTotal > 0 ? Math.round((mComp / mTotal) * 100) : 0;
+            document.getElementById('dash-moex-pct').textContent = `${mPct}%`;
+            document.getElementById('dash-moex-text').textContent = `${mComp} / ${mTotal} Completed`;
+            document.getElementById('dash-moex-bar').style.width = `${mPct}%`;
+
+            // Models List
+            document.getElementById('dash-total-switches').textContent = `${modelsTotal} Total`;
+            const modelsListEl = document.getElementById('dash-models-list');
+            modelsListEl.innerHTML = '';
+            
+            const sortedModels = Object.entries(models).sort((a, b) => b[1] - a[1]);
+            
+            if (sortedModels.length === 0) {
+                modelsListEl.innerHTML = '<div class="text-sm text-gray-400 italic">No completed switches found in current filter.</div>';
+            } else {
+                sortedModels.forEach(([model, qty]) => {
+                    const pct = Math.round((qty / modelsTotal) * 100);
+                    modelsListEl.innerHTML += `
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="font-bold text-gray-700">${model}</span>
+                                <span class="text-gray-500 font-medium">${qty} units</span>
+                            </div>
+                            <div class="w-full bg-gray-100 rounded h-1.5">
+                                <div class="bg-indigo-400 h-1.5 rounded" style="width: ${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
         }
 
         function updateStatus(sites, total, sums) {
