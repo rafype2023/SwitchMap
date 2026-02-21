@@ -140,7 +140,7 @@
         </div>
 
         <footer class="mt-8 text-center text-gray-400 text-[10px] uppercase tracking-widest pb-8">
-            Version: 0206 | Build: 2500
+            Version: 0206 | Build: 2501
         </footer>
     </div>
 
@@ -422,7 +422,7 @@
 
                     if (complete) {
                         [s1, s2, s3].forEach(s => {
-                            if (s && String(s).toUpperCase() !== 'N/A') {
+                            if (s && String(s).toUpperCase() !== 'N/A' && !String(s).toUpperCase().includes('C9300')) {
                                 const k = String(s).trim();
                                 collectedModels[k] = (collectedModels[k] || 0) + 1;
                                 collectedTotal++;
@@ -504,7 +504,7 @@
             const sortedModels = Object.entries(models).sort((a, b) => b[1] - a[1]);
             
             if (sortedModels.length === 0) {
-                modelsListEl.innerHTML = '<div class="text-sm text-gray-400 italic">No completed switches found in current filter.</div>';
+                modelsListEl.innerHTML = '<div class="text-sm text-gray-400 italic">No old switches found in current filter.</div>';
             } else {
                 sortedModels.forEach(([model, qty]) => {
                     const pct = Math.round((qty / modelsTotal) * 100);
