@@ -62,7 +62,7 @@
         <!-- Filters Section -->
         <div id="filter-section" class="bg-white p-6 rounded-lg shadow-md mb-6 hidden border border-gray-200">
             <h3 class="text-lg font-bold mb-4 text-gray-900 flex items-center gap-2">Filters</h3>
-            <div id="filter-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div id="filter-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Location Type</label>
                     <select id="type-filter" multiple class="block w-full rounded border-gray-300 text-sm p-2"></select>
@@ -74,6 +74,14 @@
                 <div id="network-filter-wrapper">
                     <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Network Segment</label>
                     <select id="network-filter" multiple class="block w-full rounded border-gray-300 text-sm p-2"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Status</label>
+                    <select id="status-filter" class="block w-full rounded border-gray-300 text-sm p-2 bg-white border">
+                        <option value="all" selected>All</option>
+                        <option value="completed">Completed</option>
+                        <option value="pending">Pending</option>
+                    </select>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-400 uppercase mb-2">Deployment Schedule</label>
@@ -140,7 +148,7 @@
         </div>
 
         <footer class="mt-8 text-center text-gray-400 text-[10px] uppercase tracking-widest pb-8">
-            Version: 0206 | Build: 2501
+            Version: 0207 | Build: 2600
         </footer>
     </div>
 
@@ -297,12 +305,16 @@
         const networkSelect = document.getElementById('network-filter');
         const dateFromInput = document.getElementById('date-from');
         const dateToInput = document.getElementById('date-to');
+        const statusFilter = document.getElementById('status-filter');
 
         loadDataButton.addEventListener('click', handleFileUpload);
          loadUrlButton.addEventListener('click', handleUrlUpload);
         document.getElementById('apply-filters').addEventListener('click', plotDataOnMap);
         document.getElementById('clear-filters').addEventListener('click', () => {
             [modelSelect, typeSelect, networkSelect].forEach(s => Array.from(s.options).forEach(o => o.selected = false));
+            statusFilter.value = 'all';
+            dateFromInput.value = '';
+            dateToInput.value = '';
             plotDataOnMap();
         });
 
@@ -378,6 +390,7 @@
             const selModels = Array.from(modelSelect.selectedOptions).map(o => o.value);
             const selTypes = Array.from(typeSelect.selectedOptions).map(o => o.value);
             const selNets = Array.from(networkSelect.selectedOptions).map(o => o.value);
+            const selStatus = statusFilter.value;
             const from = dateFromInput.value ? new Date(dateFromInput.value) : null;
             const to = dateToInput.value ? new Date(dateToInput.value) : null;
             if (to) to.setHours(23,59,59);
@@ -406,8 +419,13 @@
                 const nMatch = selNets.length === 0 || selNets.includes(network);
                 const dMatch = !rowDate || ((!from || rowDate >= from) && (!to || rowDate <= to));
 
-                if (mMatch && tMatch && nMatch && dMatch) {
-                    const complete = String(getRowValue(row, ['Complete']) || '').trim().toUpperCase() === 'Y';
+                const complete = String(getRowValue(row, ['Complete']) || '').trim().toUpperCase() === 'Y';
+                
+                let cMatch = true;
+                if (selStatus === 'completed' && !complete) cMatch = false;
+                if (selStatus === 'pending' && complete) cMatch = false;
+
+                if (mMatch && tMatch && nMatch && dMatch && cMatch) {
                     const icon = complete ? redIcon : (type.toUpperCase() === 'BRANCH' ? greenIcon : blackIcon);
                     
                     // Populate Dashboard Counters
